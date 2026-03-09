@@ -16,7 +16,7 @@ export async function registerRoutes(
 ): Promise<Server> {
   app.use(
     session({
-      secret: process.env.SESSION_SECRET || "coursepower-secret-key",
+      secret: process.env.SESSION_SECRET || "coursemini-secret-key",
       resave: false,
       saveUninitialized: false,
       cookie: {

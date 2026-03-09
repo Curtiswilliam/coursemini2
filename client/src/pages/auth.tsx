@@ -77,7 +77,7 @@ export default function AuthPage() {
             <div className="flex h-12 w-12 items-center justify-center rounded-md bg-white/20 backdrop-blur-sm">
               <GraduationCap className="h-7 w-7" />
             </div>
-            <span className="text-2xl font-bold">CoursePower</span>
+            <span className="text-2xl font-bold">CourseMini</span>
           </div>
           <h2 className="text-3xl font-bold mb-4 leading-tight">Start your learning journey today</h2>
           <p className="text-primary-foreground/80 leading-relaxed">
@@ -158,7 +158,7 @@ export default function AuthPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Create an account</CardTitle>
-                  <CardDescription>Join CoursePower and start learning today</CardDescription>
+                  <CardDescription>Join CourseMini and start learning today</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Form {...registerForm}>

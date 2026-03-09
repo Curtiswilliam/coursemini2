@@ -1,7 +1,7 @@
-# CoursePower - Online Course Platform
+# CourseMini - Online Course Platform
 
 ## Overview
-CoursePower is a full-stack online course platform (Thinkific-style) where instructors can build and manage courses, and students can enroll, learn, and track progress.
+CourseMini is a full-stack online course platform (Thinkific-style) where instructors can build and manage courses, and students can enroll, learn, and track progress.
 
 ## Tech Stack
 - **Frontend**: React + TypeScript + Tailwind CSS + shadcn/ui + wouter routing

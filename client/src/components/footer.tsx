@@ -11,7 +11,7 @@ export function Footer() {
               <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500 to-purple-600">
                 <GraduationCap className="h-4 w-4 text-primary-foreground" />
               </div>
-              <span className="font-bold">CoursePower</span>
+              <span className="font-bold">CourseMini</span>
             </div>
             <p className="text-sm text-muted-foreground">
               The modern platform for creating and selling online courses. Empower learners worldwide.
@@ -34,7 +34,7 @@ export function Footer() {
           <div>
             <h4 className="font-semibold text-sm mb-3">Support</h4>
             <div className="flex flex-col gap-2">
-              <span className="text-sm text-muted-foreground">help@coursepower.com</span>
+              <span className="text-sm text-muted-foreground">help@coursemini.com</span>
               <span className="text-sm text-muted-foreground">Privacy Policy</span>
               <span className="text-sm text-muted-foreground">Terms of Service</span>
             </div>
@@ -42,7 +42,7 @@ export function Footer() {
         </div>
         <div className="mt-8 pt-8 border-t">
           <p className="text-center text-sm text-muted-foreground">
-            2026 CoursePower. All rights reserved.
+            2026 CourseMini. All rights reserved.
           </p>
         </div>
       </div>
