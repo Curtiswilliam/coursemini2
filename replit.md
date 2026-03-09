@@ -1,7 +1,7 @@
-# LearnEngine - Online Course Platform
+# Course Power - Online Course Platform
 
 ## Overview
-LearnEngine is a full-stack online course platform (Thinkific-style) where instructors can build and manage courses, and students can enroll, learn, and track progress.
+Course Power is a full-stack online course platform (Thinkific-style) where instructors can build and manage courses, and students can enroll, learn, and track progress.
 
 ## Tech Stack
 - **Frontend**: React + TypeScript + Tailwind CSS + shadcn/ui + wouter routing
@@ -94,7 +94,7 @@ Course → Subject → Module → Lesson (3-level structure)
 - Student: student / student123
 
 ## Environment Variables
-- ADMIN_SECRET: Secret key for promoting accounts to super admin (learnengine-super-admin-2026)
+- ADMIN_SECRET: Secret key for promoting accounts to super admin
 - SESSION_SECRET: Express session secret
 - DATABASE_URL: PostgreSQL connection string
 
