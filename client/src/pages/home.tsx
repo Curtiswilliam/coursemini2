@@ -43,13 +43,13 @@ export default function Home() {
       <section className="relative overflow-hidden">
         <div className="absolute inset-0">
           <img src={heroBg} alt="" className="h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-950/90 via-purple-900/70 to-fuchsia-900/50" />
+          <div className="absolute inset-0 bg-gradient-to-br from-orange-950/90 via-rose-900/70 to-pink-900/50" />
         </div>
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-24 md:py-36">
           <div className="max-w-2xl">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-tight" data-testid="text-hero-title">
               Learn Without
-              <span className="block bg-gradient-to-r from-indigo-400 via-purple-400 to-fuchsia-400 bg-clip-text text-transparent">Limits</span>
+              <span className="block bg-gradient-to-r from-orange-400 via-rose-400 to-pink-400 bg-clip-text text-transparent">Limits</span>
             </h1>
             <p className="mt-6 text-lg text-gray-300 max-w-lg leading-relaxed">
               Master new skills with world-class instructors. Access thousands of courses
@@ -156,7 +156,7 @@ export default function Home() {
 
       <section className="py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="relative rounded-lg overflow-hidden bg-gradient-to-r from-indigo-600 via-purple-600 to-fuchsia-600 p-8 md:p-16 text-center">
+          <div className="relative rounded-lg overflow-hidden bg-gradient-to-r from-orange-500 via-rose-500 to-pink-500 p-8 md:p-16 text-center">
             <div className="relative z-10">
               <h2 className="text-3xl md:text-4xl font-bold text-primary-foreground mb-4">
                 Ready to Start Learning?

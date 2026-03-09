@@ -71,7 +71,7 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex">
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600 relative items-center justify-center p-12">
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-orange-500 via-rose-500 to-pink-500 relative items-center justify-center p-12">
         <div className="relative z-10 text-primary-foreground max-w-md">
           <div className="flex items-center gap-3 mb-8">
             <div className="flex h-12 w-12 items-center justify-center rounded-md bg-white/20 backdrop-blur-sm">
