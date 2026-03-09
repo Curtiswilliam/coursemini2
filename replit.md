@@ -1,7 +1,7 @@
-# Course Power - Online Course Platform
+# CoursePower - Online Course Platform
 
 ## Overview
-Course Power is a full-stack online course platform (Thinkific-style) where instructors can build and manage courses, and students can enroll, learn, and track progress.
+CoursePower is a full-stack online course platform (Thinkific-style) where instructors can build and manage courses, and students can enroll, learn, and track progress.
 
 ## Tech Stack
 - **Frontend**: React + TypeScript + Tailwind CSS + shadcn/ui + wouter routing

@@ -162,7 +162,7 @@ export default function Home() {
                 Ready to Start Learning?
               </h2>
               <p className="text-primary-foreground/80 max-w-lg mx-auto mb-8">
-                Join thousands of students already learning on Course Power. Sign up today and get access to our growing library of courses.
+                Join thousands of students already learning on CoursePower. Sign up today and get access to our growing library of courses.
               </p>
               <Link href="/auth?tab=register">
                 <Button size="lg" variant="secondary" data-testid="button-cta-signup">

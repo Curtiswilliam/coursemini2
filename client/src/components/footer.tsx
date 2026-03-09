@@ -11,7 +11,7 @@ export function Footer() {
               <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
                 <GraduationCap className="h-4 w-4 text-primary-foreground" />
               </div>
-              <span className="font-bold">Course Power</span>
+              <span className="font-bold">CoursePower</span>
             </div>
             <p className="text-sm text-muted-foreground">
               The modern platform for creating and selling online courses. Empower learners worldwide.
@@ -42,7 +42,7 @@ export function Footer() {
         </div>
         <div className="mt-8 pt-8 border-t">
           <p className="text-center text-sm text-muted-foreground">
-            2026 Course Power. All rights reserved.
+            2026 CoursePower. All rights reserved.
           </p>
         </div>
       </div>
