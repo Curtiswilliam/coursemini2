@@ -19,6 +19,7 @@ import CourseEditor from "@/pages/admin/course-editor";
 import AdminStudents from "@/pages/admin/students";
 import AdminSetup from "@/pages/admin/setup";
 import AdminUsers from "@/pages/admin/users";
+import AdminAnalytics from "@/pages/admin/analytics";
 
 function Router() {
   return (
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/admin/setup" component={AdminSetup} />
       <Route path="/admin/courses/new" component={CourseEditor} />
       <Route path="/admin/courses/:id/edit" component={CourseEditor} />
+      <Route path="/admin/analytics" component={AdminAnalytics} />
       <Route path="/admin/students" component={AdminStudents} />
       <Route path="/admin/users" component={AdminUsers} />
       <Route component={NotFound} />

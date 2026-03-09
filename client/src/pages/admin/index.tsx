@@ -12,6 +12,7 @@ import {
   ArrowRight,
   BarChart3,
   Shield,
+  PieChart,
 } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -121,9 +122,23 @@ export default function AdminDashboard() {
         </div>
 
         {user?.role === "ADMIN" && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Link href="/admin/analytics">
+              <Card className="hover-elevate cursor-pointer" data-testid="card-analytics">
+                <CardContent className="p-6 flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-md bg-purple-500/10 flex items-center justify-center">
+                    <PieChart className="h-5 w-5 text-purple-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Analytics</h3>
+                    <p className="text-sm text-muted-foreground">Platform metrics and insights</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground" />
+                </CardContent>
+              </Card>
+            </Link>
             <Link href="/admin/users">
-              <Card className="hover-elevate cursor-pointer">
+              <Card className="hover-elevate cursor-pointer" data-testid="card-user-management">
                 <CardContent className="p-6 flex items-center gap-4">
                   <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center">
                     <Shield className="h-5 w-5 text-primary" />
@@ -137,7 +152,7 @@ export default function AdminDashboard() {
               </Card>
             </Link>
             <Link href="/admin/students">
-              <Card className="hover-elevate cursor-pointer">
+              <Card className="hover-elevate cursor-pointer" data-testid="card-students">
                 <CardContent className="p-6 flex items-center gap-4">
                   <div className="h-10 w-10 rounded-md bg-emerald-500/10 flex items-center justify-center">
                     <Users className="h-5 w-5 text-emerald-500" />

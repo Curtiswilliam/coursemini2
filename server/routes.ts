@@ -439,6 +439,19 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/analytics", requireAdmin as any, async (req, res) => {
+    try {
+      const currentUser = (req as any).currentUser;
+      if (currentUser.role !== "ADMIN") {
+        return res.status(403).json({ message: "Only admins can access platform analytics" });
+      }
+      const analytics = await storage.getAnalytics();
+      res.json(analytics);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/admin/students", requireAdmin as any, async (req, res) => {
     const students = await storage.getStudents();
     res.json(students);

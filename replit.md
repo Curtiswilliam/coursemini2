@@ -64,6 +64,15 @@ Course → Subject → Module → Lesson (3-level structure)
 - lesson_progress (per-lesson completion)
 - reviews
 
+## Admin Pages
+- /admin - Dashboard with overview stats, quick links, course list
+- /admin/analytics - Comprehensive analytics (courses, categories, instructors, enrollments)
+- /admin/courses/new - Create new course
+- /admin/courses/:id/edit - Edit course with 3-level curriculum builder
+- /admin/students - Student management
+- /admin/users - User role management (ADMIN only)
+- /admin/setup - Super admin promotion page
+
 ## Key API Routes
 - Auth: /api/auth/login, /api/auth/register, /api/auth/me, /api/auth/logout
 - Courses: /api/courses, /api/courses/:slug

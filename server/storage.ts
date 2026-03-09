@@ -56,6 +56,7 @@ export interface IStorage {
 
   getStats(): Promise<any>;
   getAdminStats(instructorId: number): Promise<any>;
+  getAnalytics(): Promise<any>;
   getStudents(): Promise<any[]>;
 }
 
@@ -441,6 +442,167 @@ export class DatabaseStorage implements IStorage {
       studentCount: studentSet.size,
       enrollmentCount,
       publishedCount,
+    };
+  }
+
+  async getAnalytics(): Promise<any> {
+    const [totalCourses] = await db.select({ count: count() }).from(courses);
+    const [publishedCourses] = await db.select({ count: count() }).from(courses).where(eq(courses.status, "PUBLISHED"));
+    const [draftCourses] = await db.select({ count: count() }).from(courses).where(eq(courses.status, "DRAFT"));
+    const [totalStudents] = await db.select({ count: count() }).from(users).where(eq(users.role, "STUDENT"));
+    const [totalInstructors] = await db.select({ count: count() }).from(users).where(eq(users.role, "INSTRUCTOR"));
+    const [totalAdmins] = await db.select({ count: count() }).from(users).where(eq(users.role, "ADMIN"));
+    const [totalEnrollments] = await db.select({ count: count() }).from(enrollments);
+    const [activeEnrollments] = await db.select({ count: count() }).from(enrollments).where(eq(enrollments.status, "ACTIVE"));
+    const [completedEnrollments] = await db.select({ count: count() }).from(enrollments).where(eq(enrollments.status, "COMPLETED"));
+    const [totalLessons] = await db.select({ count: count() }).from(lessons);
+    const [totalSubjects] = await db.select({ count: count() }).from(subjects);
+    const [totalModules] = await db.select({ count: count() }).from(modules);
+    const [completedLessons] = await db.select({ count: count() }).from(lessonProgress).where(eq(lessonProgress.status, "COMPLETED"));
+
+    const allCourses = await db.select().from(courses).orderBy(desc(courses.createdAt));
+    const courseAnalytics = await Promise.all(
+      allCourses.map(async (course) => {
+        const [instructor] = await db
+          .select({ id: users.id, name: users.name })
+          .from(users)
+          .where(eq(users.id, course.instructorId));
+
+        const [enrollCount] = await db
+          .select({ count: count() })
+          .from(enrollments)
+          .where(eq(enrollments.courseId, course.id));
+
+        const [completedCount] = await db
+          .select({ count: count() })
+          .from(enrollments)
+          .where(and(eq(enrollments.courseId, course.id), eq(enrollments.status, "COMPLETED")));
+
+        const courseSubjects = await db.select().from(subjects).where(eq(subjects.courseId, course.id));
+        let lessonCount = 0;
+        for (const subj of courseSubjects) {
+          const subjModules = await db.select().from(modules).where(eq(modules.subjectId, subj.id));
+          for (const mod of subjModules) {
+            const [lc] = await db.select({ count: count() }).from(lessons).where(eq(lessons.moduleId, mod.id));
+            lessonCount += lc.count;
+          }
+        }
+
+        const courseEnrollments = await db.select().from(enrollments).where(eq(enrollments.courseId, course.id));
+        const avgProgress = courseEnrollments.length > 0
+          ? courseEnrollments.reduce((sum, e) => sum + (e.progress || 0), 0) / courseEnrollments.length
+          : 0;
+
+        const reviewList = await db.select().from(reviews).where(eq(reviews.courseId, course.id));
+        const avgRating = reviewList.length > 0
+          ? reviewList.reduce((sum, r) => sum + r.rating, 0) / reviewList.length
+          : 0;
+
+        return {
+          id: course.id,
+          title: course.title,
+          slug: course.slug,
+          status: course.status,
+          instructor: instructor?.name || "Unknown",
+          enrollments: enrollCount.count,
+          completions: completedCount.count,
+          completionRate: enrollCount.count > 0 ? Math.round((completedCount.count / enrollCount.count) * 100) : 0,
+          lessonCount,
+          subjectCount: courseSubjects.length,
+          avgProgress: Math.round(avgProgress),
+          avgRating: Math.round(avgRating * 10) / 10,
+          reviewCount: reviewList.length,
+          createdAt: course.createdAt,
+        };
+      })
+    );
+
+    const allCategories = await db.select().from(categories);
+    const categoryBreakdown = await Promise.all(
+      allCategories.map(async (cat) => {
+        const catCourses = allCourses.filter(c => c.categoryId === cat.id);
+        let catEnrollments = 0;
+        for (const c of catCourses) {
+          const [ec] = await db.select({ count: count() }).from(enrollments).where(eq(enrollments.courseId, c.id));
+          catEnrollments += ec.count;
+        }
+        return {
+          name: cat.name,
+          slug: cat.slug,
+          courseCount: catCourses.length,
+          enrollments: catEnrollments,
+        };
+      })
+    );
+
+    const recentEnrollments = await db
+      .select()
+      .from(enrollments)
+      .orderBy(desc(enrollments.enrolledAt))
+      .limit(10);
+
+    const recentEnrollmentsWithDetails = await Promise.all(
+      recentEnrollments.map(async (enrollment) => {
+        const [student] = await db
+          .select({ name: users.name, username: users.username })
+          .from(users)
+          .where(eq(users.id, enrollment.userId));
+        const [course] = await db
+          .select({ title: courses.title, slug: courses.slug })
+          .from(courses)
+          .where(eq(courses.id, enrollment.courseId));
+        return {
+          id: enrollment.id,
+          studentName: student?.name || "Unknown",
+          studentUsername: student?.username || "",
+          courseTitle: course?.title || "Unknown",
+          courseSlug: course?.slug || "",
+          status: enrollment.status,
+          progress: Math.round(enrollment.progress || 0),
+          enrolledAt: enrollment.enrolledAt,
+        };
+      })
+    );
+
+    const topInstructors = await Promise.all(
+      (await db.select().from(users).where(eq(users.role, "INSTRUCTOR"))).map(async (instructor) => {
+        const instrCourses = allCourses.filter(c => c.instructorId === instructor.id);
+        let totalEnroll = 0;
+        for (const c of instrCourses) {
+          const [ec] = await db.select({ count: count() }).from(enrollments).where(eq(enrollments.courseId, c.id));
+          totalEnroll += ec.count;
+        }
+        return {
+          name: instructor.name,
+          username: instructor.username,
+          courseCount: instrCourses.length,
+          totalEnrollments: totalEnroll,
+        };
+      })
+    );
+
+    return {
+      overview: {
+        totalCourses: totalCourses.count,
+        publishedCourses: publishedCourses.count,
+        draftCourses: draftCourses.count,
+        totalStudents: totalStudents.count,
+        totalInstructors: totalInstructors.count,
+        totalAdmins: totalAdmins.count,
+        totalUsers: totalStudents.count + totalInstructors.count + totalAdmins.count,
+        totalEnrollments: totalEnrollments.count,
+        activeEnrollments: activeEnrollments.count,
+        completedEnrollments: completedEnrollments.count,
+        totalLessons: totalLessons.count,
+        totalSubjects: totalSubjects.count,
+        totalModules: totalModules.count,
+        completedLessonProgress: completedLessons.count,
+        overallCompletionRate: totalEnrollments.count > 0 ? Math.round((completedEnrollments.count / totalEnrollments.count) * 100) : 0,
+      },
+      courseAnalytics,
+      categoryBreakdown,
+      recentEnrollments: recentEnrollmentsWithDetails,
+      topInstructors,
     };
   }
 
