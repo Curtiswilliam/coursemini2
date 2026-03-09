@@ -19,7 +19,6 @@ import { RichTextEditor } from "@/components/rich-text-editor";
 import {
   Plus,
   Trash2,
-  GripVertical,
   ArrowLeft,
   Save,
   Eye,
@@ -51,7 +50,6 @@ const courseSchema = z.object({
 
 export default function CourseEditor() {
   const [, params] = useRoute("/admin/courses/:id/edit");
-  const [, newParams] = useRoute("/admin/courses/new");
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const isNew = !params?.id;

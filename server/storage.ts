@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, asc, ilike, sql, count } from "drizzle-orm";
+import { eq, and, desc, asc, count } from "drizzle-orm";
 import {
   users, courses, categories, subjects, modules, lessons,
   enrollments, lessonProgress, reviews,

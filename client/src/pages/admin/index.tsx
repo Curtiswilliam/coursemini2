@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth";
@@ -171,11 +171,6 @@ export default function AdminDashboard() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold">Your Courses</h2>
-            <Link href="/admin/courses">
-              <Button variant="ghost" size="sm">
-                View All <ArrowRight className="h-4 w-4 ml-1" />
-              </Button>
-            </Link>
           </div>
           {recentCourses && recentCourses.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

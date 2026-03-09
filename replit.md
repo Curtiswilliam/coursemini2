@@ -40,6 +40,7 @@ server/
   index.ts          - Express server setup
   routes.ts         - API routes
   storage.ts        - Database storage layer
+  auth.ts           - Shared password hashing utilities
   db.ts             - Database connection
   seed.ts           - Seed data
 

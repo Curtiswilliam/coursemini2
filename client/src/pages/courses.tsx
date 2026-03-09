@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,7 +8,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Search, SlidersHorizontal, Grid3X3, List, X } from "lucide-react";
 
 export default function CoursesPage() {
-  const [location] = useLocation();
   const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
   const [search, setSearch] = useState(params.get("search") || "");
   const [category, setCategory] = useState(params.get("category") || "all");

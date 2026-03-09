@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -9,7 +9,6 @@ import { BookOpen, ArrowRight, GraduationCap, Trophy } from "lucide-react";
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [, navigate] = useLocation();
 
   const { data: enrollments, isLoading } = useQuery<any[]>({
     queryKey: ["/api/enrollments"],

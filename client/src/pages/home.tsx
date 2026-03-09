@@ -7,7 +7,6 @@ import {
   GraduationCap,
   Users,
   Award,
-  TrendingUp,
   ArrowRight,
   BookOpen,
   Code,

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/components/theme-provider";
-import { GraduationCap, Sun, Moon, LogOut, LayoutDashboard, Settings, BookOpen } from "lucide-react";
+import { GraduationCap, Sun, Moon, LogOut, LayoutDashboard, BookOpen } from "lucide-react";
 
 export function Navbar() {
   const { user, logout } = useAuth();
@@ -84,12 +84,6 @@ export function Navbar() {
                       </DropdownMenuItem>
                     </Link>
                   )}
-                  <Link href="/dashboard/settings">
-                    <DropdownMenuItem data-testid="link-settings">
-                      <Settings className="mr-2 h-4 w-4" />
-                      Settings
-                    </DropdownMenuItem>
-                  </Link>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout} data-testid="button-logout">
                     <LogOut className="mr-2 h-4 w-4" />
