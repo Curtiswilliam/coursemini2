@@ -115,6 +115,25 @@ export async function registerRoutes(
     res.json({ id: user.id, username: user.username, name: user.name, email: user.email, role: user.role, avatar: user.avatar, bio: user.bio });
   });
 
+  app.post("/api/auth/promote-admin", async (req, res) => {
+    try {
+      if (!req.session.userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const { secret } = req.body;
+      if (!secret || secret !== process.env.ADMIN_SECRET) {
+        return res.status(403).json({ message: "Invalid admin secret" });
+      }
+      const user = await storage.updateUserRole(req.session.userId, "ADMIN");
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json({ id: user.id, username: user.username, name: user.name, email: user.email, role: user.role });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   // Public routes
   app.get("/api/categories", async (_req, res) => {
     const cats = await storage.getCategories();
@@ -362,6 +381,35 @@ export async function registerRoutes(
   app.get("/api/admin/students", requireAdmin as any, async (req, res) => {
     const students = await storage.getStudents();
     res.json(students);
+  });
+
+  app.get("/api/admin/users", requireAdmin as any, async (req, res) => {
+    const currentUser = (req as any).currentUser;
+    if (currentUser.role !== "ADMIN") {
+      return res.status(403).json({ message: "Only super admins can manage users" });
+    }
+    const allUsers = await storage.getUsers();
+    res.json(allUsers.map(u => ({ id: u.id, username: u.username, name: u.name, email: u.email, role: u.role })));
+  });
+
+  app.patch("/api/admin/users/:id/role", requireAdmin as any, async (req, res) => {
+    try {
+      const currentUser = (req as any).currentUser;
+      if (currentUser.role !== "ADMIN") {
+        return res.status(403).json({ message: "Only super admins can manage users" });
+      }
+      const { role } = req.body;
+      if (!["STUDENT", "INSTRUCTOR", "ADMIN"].includes(role)) {
+        return res.status(400).json({ message: "Invalid role" });
+      }
+      const updated = await storage.updateUserRole(parseInt(req.params.id), role);
+      if (!updated) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json({ id: updated.id, username: updated.username, name: updated.name, email: updated.email, role: updated.role });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
   });
 
   return httpServer;

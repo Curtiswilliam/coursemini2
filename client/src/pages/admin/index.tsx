@@ -11,6 +11,7 @@ import {
   Plus,
   ArrowRight,
   BarChart3,
+  Shield,
 } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -118,6 +119,39 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {user?.role === "ADMIN" && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Link href="/admin/users">
+              <Card className="hover-elevate cursor-pointer">
+                <CardContent className="p-6 flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center">
+                    <Shield className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">User Management</h3>
+                    <p className="text-sm text-muted-foreground">Manage user roles and permissions</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground" />
+                </CardContent>
+              </Card>
+            </Link>
+            <Link href="/admin/students">
+              <Card className="hover-elevate cursor-pointer">
+                <CardContent className="p-6 flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-md bg-emerald-500/10 flex items-center justify-center">
+                    <Users className="h-5 w-5 text-emerald-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Students</h3>
+                    <p className="text-sm text-muted-foreground">View enrolled students and progress</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 ml-auto text-muted-foreground" />
+                </CardContent>
+              </Card>
+            </Link>
+          </div>
+        )}
 
         <div>
           <div className="flex items-center justify-between mb-4">

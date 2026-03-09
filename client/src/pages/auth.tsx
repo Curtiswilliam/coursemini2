@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { GraduationCap, Loader2 } from "lucide-react";
@@ -23,7 +22,6 @@ const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
   username: z.string().min(3, "Username must be at least 3 characters"),
   password: z.string().min(6, "Password must be at least 6 characters"),
-  role: z.enum(["STUDENT", "INSTRUCTOR"]).default("STUDENT"),
 });
 
 export default function AuthPage() {
@@ -42,7 +40,7 @@ export default function AuthPage() {
 
   const registerForm = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { name: "", email: "", username: "", password: "", role: "STUDENT" as const },
+    defaultValues: { name: "", email: "", username: "", password: "" },
   });
 
   async function onLogin(values: z.infer<typeof loginSchema>) {
@@ -213,27 +211,6 @@ export default function AuthPage() {
                             <FormControl>
                               <Input type="password" placeholder="Min. 6 characters" {...field} data-testid="input-register-password" />
                             </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={registerForm.control}
-                        name="role"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>I want to</FormLabel>
-                            <Select value={field.value} onValueChange={field.onChange}>
-                              <FormControl>
-                                <SelectTrigger data-testid="select-register-role">
-                                  <SelectValue />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="STUDENT">Learn courses (Student)</SelectItem>
-                                <SelectItem value="INSTRUCTOR">Create & sell courses (Instructor)</SelectItem>
-                              </SelectContent>
-                            </Select>
                             <FormMessage />
                           </FormItem>
                         )}
