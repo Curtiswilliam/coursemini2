@@ -15,6 +15,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { RichTextEditor } from "@/components/rich-text-editor";
 import {
   Plus,
   Trash2,
@@ -27,6 +28,9 @@ import {
   ChevronRight,
   Play,
   FileText,
+  BookOpen,
+  Layers,
+  Box,
 } from "lucide-react";
 
 const courseSchema = z.object({
@@ -53,7 +57,8 @@ export default function CourseEditor() {
   const isNew = !params?.id;
   const courseId = params?.id ? parseInt(params.id) : null;
 
-  const [expandedChapters, setExpandedChapters] = useState<Set<number>>(new Set());
+  const [expandedSubjects, setExpandedSubjects] = useState<Set<number>>(new Set());
+  const [expandedModules, setExpandedModules] = useState<Set<number>>(new Set());
   const [editingLesson, setEditingLesson] = useState<number | null>(null);
 
   const { data: course, isLoading } = useQuery<any>({
@@ -137,12 +142,12 @@ export default function CourseEditor() {
     },
   });
 
-  const addChapterMutation = useMutation({
+  const addSubjectMutation = useMutation({
     mutationFn: async () => {
-      const position = (course?.chapters?.length || 0);
-      const res = await apiRequest("POST", "/api/admin/chapters", {
+      const position = (course?.subjects?.length || 0);
+      const res = await apiRequest("POST", "/api/admin/subjects", {
         courseId,
-        title: `Chapter ${position + 1}`,
+        title: `Subject ${position + 1}`,
         position,
       });
       return res.json();
@@ -152,18 +157,50 @@ export default function CourseEditor() {
     },
   });
 
-  const updateChapterMutation = useMutation({
+  const updateSubjectMutation = useMutation({
     mutationFn: async ({ id, title }: { id: number; title: string }) => {
-      await apiRequest("PATCH", `/api/admin/chapters/${id}`, { title });
+      await apiRequest("PATCH", `/api/admin/subjects/${id}`, { title });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/courses", courseId] });
     },
   });
 
-  const deleteChapterMutation = useMutation({
+  const deleteSubjectMutation = useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/admin/chapters/${id}`);
+      await apiRequest("DELETE", `/api/admin/subjects/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/courses", courseId] });
+    },
+  });
+
+  const addModuleMutation = useMutation({
+    mutationFn: async ({ subjectId, position }: { subjectId: number; position: number }) => {
+      const res = await apiRequest("POST", "/api/admin/modules", {
+        subjectId,
+        title: `Module ${position + 1}`,
+        position,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/courses", courseId] });
+    },
+  });
+
+  const updateModuleMutation = useMutation({
+    mutationFn: async ({ id, title }: { id: number; title: string }) => {
+      await apiRequest("PATCH", `/api/admin/modules/${id}`, { title });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/courses", courseId] });
+    },
+  });
+
+  const deleteModuleMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/modules/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/courses", courseId] });
@@ -171,9 +208,9 @@ export default function CourseEditor() {
   });
 
   const addLessonMutation = useMutation({
-    mutationFn: async ({ chapterId, position }: { chapterId: number; position: number }) => {
+    mutationFn: async ({ moduleId, position }: { moduleId: number; position: number }) => {
       const res = await apiRequest("POST", "/api/admin/lessons", {
-        chapterId,
+        moduleId,
         title: `New Lesson`,
         type: "TEXT",
         position,
@@ -284,7 +321,7 @@ export default function CourseEditor() {
                         name="title"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Title</FormLabel>
+                            <FormLabel>Course Name</FormLabel>
                             <FormControl>
                               <Input placeholder="e.g. Web Development Masterclass" {...field} data-testid="input-title" />
                             </FormControl>
@@ -423,7 +460,7 @@ export default function CourseEditor() {
                           <FormLabel>Learning Outcomes (one per line)</FormLabel>
                           <FormControl>
                             <Textarea
-                              placeholder="Build responsive websites&#10;Master JavaScript fundamentals&#10;Deploy applications to the cloud"
+                              placeholder="Build responsive websites&#10;Master JavaScript fundamentals"
                               className="min-h-[100px]"
                               {...field}
                               value={field.value || ""}
@@ -445,130 +482,206 @@ export default function CourseEditor() {
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">Chapters & Lessons</CardTitle>
+                    <div>
+                      <CardTitle className="text-base">Course Curriculum</CardTitle>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Organize content into Subjects → Modules → Lessons
+                      </p>
+                    </div>
                     <Button
                       size="sm"
-                      onClick={() => addChapterMutation.mutate()}
-                      disabled={addChapterMutation.isPending}
-                      data-testid="button-add-chapter"
+                      onClick={() => addSubjectMutation.mutate()}
+                      disabled={addSubjectMutation.isPending}
+                      data-testid="button-add-subject"
                     >
                       <Plus className="h-4 w-4 mr-1" />
-                      Add Chapter
+                      Add Subject
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {course?.chapters?.length === 0 ? (
+                  {!course?.subjects?.length ? (
                     <div className="text-center py-8 text-muted-foreground">
-                      <p>No chapters yet. Click "Add Chapter" to get started.</p>
+                      <Layers className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>No subjects yet. Click "Add Subject" to start building your course.</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {course?.chapters
-                        ?.sort((a: any, b: any) => a.position - b.position)
-                        .map((chapter: any) => {
-                          const isExpanded = expandedChapters.has(chapter.id);
+                      {course.subjects
+                        .sort((a: any, b: any) => a.position - b.position)
+                        .map((subject: any) => {
+                          const isSubjExpanded = expandedSubjects.has(subject.id);
                           return (
-                            <div key={chapter.id} className="border rounded-md" data-testid={`chapter-${chapter.id}`}>
-                              <div className="flex items-center gap-2 p-3">
+                            <div key={subject.id} className="border rounded-lg" data-testid={`subject-${subject.id}`}>
+                              <div className="flex items-center gap-2 p-3 bg-muted/30">
                                 <button
                                   onClick={() => {
-                                    const next = new Set(expandedChapters);
-                                    if (isExpanded) next.delete(chapter.id);
-                                    else next.add(chapter.id);
-                                    setExpandedChapters(next);
+                                    const next = new Set(expandedSubjects);
+                                    if (isSubjExpanded) next.delete(subject.id);
+                                    else next.add(subject.id);
+                                    setExpandedSubjects(next);
                                   }}
                                   className="text-muted-foreground"
+                                  data-testid={`toggle-subject-${subject.id}`}
                                 >
-                                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                  {isSubjExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                                 </button>
-                                <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                <Layers className="h-4 w-4 text-primary" />
                                 <Input
-                                  defaultValue={chapter.title}
-                                  className="flex-1 h-8 text-sm font-medium"
+                                  defaultValue={subject.title}
+                                  className="flex-1 h-8 text-sm font-semibold bg-transparent border-none focus-visible:ring-1"
                                   onBlur={(e) => {
-                                    if (e.target.value !== chapter.title) {
-                                      updateChapterMutation.mutate({ id: chapter.id, title: e.target.value });
+                                    if (e.target.value !== subject.title) {
+                                      updateSubjectMutation.mutate({ id: subject.id, title: e.target.value });
                                     }
                                   }}
-                                  data-testid={`input-chapter-title-${chapter.id}`}
+                                  data-testid={`input-subject-title-${subject.id}`}
                                 />
-                                <span className="text-xs text-muted-foreground">
-                                  {chapter.lessons?.length || 0} lessons
+                                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                  {subject.modules?.length || 0} modules
                                 </span>
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  className="h-7 w-7"
                                   onClick={() => {
-                                    if (confirm("Delete this chapter and all its lessons?")) {
-                                      deleteChapterMutation.mutate(chapter.id);
+                                    if (confirm("Delete this subject and all its modules and lessons?")) {
+                                      deleteSubjectMutation.mutate(subject.id);
                                     }
                                   }}
-                                  data-testid={`button-delete-chapter-${chapter.id}`}
+                                  data-testid={`button-delete-subject-${subject.id}`}
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
                               </div>
-                              {isExpanded && (
-                                <div className="border-t px-3 pb-3">
-                                  {chapter.lessons
+                              {isSubjExpanded && (
+                                <div className="border-t p-3 space-y-2">
+                                  {subject.modules
                                     ?.sort((a: any, b: any) => a.position - b.position)
-                                    .map((lesson: any) => (
-                                      <div key={lesson.id} className="py-2" data-testid={`lesson-${lesson.id}`}>
-                                        {editingLesson === lesson.id ? (
-                                          <LessonEditor
-                                            lesson={lesson}
-                                            onSave={(data) => updateLessonMutation.mutate({ id: lesson.id, ...data })}
-                                            onCancel={() => setEditingLesson(null)}
-                                            isSaving={updateLessonMutation.isPending}
-                                          />
-                                        ) : (
-                                          <div className="flex items-center gap-2 pl-6">
-                                            <GripVertical className="h-3 w-3 text-muted-foreground" />
-                                            {lesson.type === "VIDEO" ? (
-                                              <Play className="h-3 w-3 text-muted-foreground" />
-                                            ) : (
-                                              <FileText className="h-3 w-3 text-muted-foreground" />
-                                            )}
+                                    .map((mod: any) => {
+                                      const isModExpanded = expandedModules.has(mod.id);
+                                      return (
+                                        <div key={mod.id} className="border rounded-md ml-4" data-testid={`module-${mod.id}`}>
+                                          <div className="flex items-center gap-2 p-2 bg-background">
                                             <button
-                                              className="flex-1 text-left text-sm hover:text-primary transition-colors"
-                                              onClick={() => setEditingLesson(lesson.id)}
-                                              data-testid={`button-edit-lesson-${lesson.id}`}
+                                              onClick={() => {
+                                                const next = new Set(expandedModules);
+                                                if (isModExpanded) next.delete(mod.id);
+                                                else next.add(mod.id);
+                                                setExpandedModules(next);
+                                              }}
+                                              className="text-muted-foreground"
+                                              data-testid={`toggle-module-${mod.id}`}
                                             >
-                                              {lesson.title}
+                                              {isModExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                                             </button>
-                                            <span className="text-xs text-muted-foreground capitalize">{lesson.type?.toLowerCase()}</span>
+                                            <Box className="h-3.5 w-3.5 text-amber-500" />
+                                            <Input
+                                              defaultValue={mod.title}
+                                              className="flex-1 h-7 text-sm font-medium bg-transparent border-none focus-visible:ring-1"
+                                              onBlur={(e) => {
+                                                if (e.target.value !== mod.title) {
+                                                  updateModuleMutation.mutate({ id: mod.id, title: e.target.value });
+                                                }
+                                              }}
+                                              data-testid={`input-module-title-${mod.id}`}
+                                            />
+                                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                              {mod.lessons?.length || 0} lessons
+                                            </span>
                                             <Button
                                               variant="ghost"
                                               size="icon"
-                                              className="h-7 w-7"
+                                              className="h-6 w-6"
                                               onClick={() => {
-                                                if (confirm("Delete this lesson?")) {
-                                                  deleteLessonMutation.mutate(lesson.id);
+                                                if (confirm("Delete this module and all its lessons?")) {
+                                                  deleteModuleMutation.mutate(mod.id);
                                                 }
                                               }}
-                                              data-testid={`button-delete-lesson-${lesson.id}`}
+                                              data-testid={`button-delete-module-${mod.id}`}
                                             >
                                               <Trash2 className="h-3 w-3 text-destructive" />
                                             </Button>
                                           </div>
-                                        )}
-                                      </div>
-                                    ))}
+                                          {isModExpanded && (
+                                            <div className="border-t px-3 pb-2">
+                                              {mod.lessons
+                                                ?.sort((a: any, b: any) => a.position - b.position)
+                                                .map((lesson: any) => (
+                                                  <div key={lesson.id} className="py-1.5" data-testid={`lesson-${lesson.id}`}>
+                                                    {editingLesson === lesson.id ? (
+                                                      <LessonEditor
+                                                        lesson={lesson}
+                                                        onSave={(data) => updateLessonMutation.mutate({ id: lesson.id, ...data })}
+                                                        onCancel={() => setEditingLesson(null)}
+                                                        isSaving={updateLessonMutation.isPending}
+                                                      />
+                                                    ) : (
+                                                      <div className="flex items-center gap-2 pl-4">
+                                                        {lesson.type === "VIDEO" ? (
+                                                          <Play className="h-3 w-3 text-muted-foreground shrink-0" />
+                                                        ) : (
+                                                          <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
+                                                        )}
+                                                        <button
+                                                          className="flex-1 text-left text-sm hover:text-primary transition-colors"
+                                                          onClick={() => setEditingLesson(lesson.id)}
+                                                          data-testid={`button-edit-lesson-${lesson.id}`}
+                                                        >
+                                                          {lesson.title}
+                                                        </button>
+                                                        <span className="text-xs text-muted-foreground capitalize">{lesson.type?.toLowerCase()}</span>
+                                                        <Button
+                                                          variant="ghost"
+                                                          size="icon"
+                                                          className="h-6 w-6"
+                                                          onClick={() => {
+                                                            if (confirm("Delete this lesson?")) {
+                                                              deleteLessonMutation.mutate(lesson.id);
+                                                            }
+                                                          }}
+                                                          data-testid={`button-delete-lesson-${lesson.id}`}
+                                                        >
+                                                          <Trash2 className="h-3 w-3 text-destructive" />
+                                                        </Button>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                ))}
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="ml-4 mt-1 text-xs"
+                                                onClick={() =>
+                                                  addLessonMutation.mutate({
+                                                    moduleId: mod.id,
+                                                    position: mod.lessons?.length || 0,
+                                                  })
+                                                }
+                                                data-testid={`button-add-lesson-${mod.id}`}
+                                              >
+                                                <Plus className="h-3 w-3 mr-1" />
+                                                Add Lesson
+                                              </Button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
                                   <Button
-                                    variant="ghost"
+                                    variant="outline"
                                     size="sm"
-                                    className="ml-6 mt-1"
+                                    className="ml-4 text-xs"
                                     onClick={() =>
-                                      addLessonMutation.mutate({
-                                        chapterId: chapter.id,
-                                        position: chapter.lessons?.length || 0,
+                                      addModuleMutation.mutate({
+                                        subjectId: subject.id,
+                                        position: subject.modules?.length || 0,
                                       })
                                     }
-                                    data-testid={`button-add-lesson-${chapter.id}`}
+                                    data-testid={`button-add-module-${subject.id}`}
                                   >
                                     <Plus className="h-3 w-3 mr-1" />
-                                    Add Lesson
+                                    Add Module
                                   </Button>
                                 </div>
                               )}
@@ -680,19 +793,20 @@ function LessonEditor({
   const [type, setType] = useState(lesson.type || "TEXT");
   const [content, setContent] = useState(lesson.content || "");
   const [videoUrl, setVideoUrl] = useState(lesson.videoUrl || "");
-  const [duration, setDuration] = useState(lesson.duration || 0);
+  const [duration, setDuration] = useState(lesson.duration?.toString() || "");
 
   return (
-    <div className="pl-6 space-y-3 bg-accent/30 rounded-md p-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div className="border rounded-md p-4 space-y-3 bg-muted/20" data-testid={`lesson-editor-${lesson.id}`}>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Lesson title"
-          data-testid="input-lesson-title"
+          className="md:col-span-2"
+          data-testid={`input-lesson-title-${lesson.id}`}
         />
         <Select value={type} onValueChange={setType}>
-          <SelectTrigger data-testid="select-lesson-type">
+          <SelectTrigger data-testid={`select-lesson-type-${lesson.id}`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -701,39 +815,51 @@ function LessonEditor({
           </SelectContent>
         </Select>
       </div>
+
       {type === "VIDEO" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Input
-            value={videoUrl}
-            onChange={(e) => setVideoUrl(e.target.value)}
-            placeholder="Video URL"
-            data-testid="input-video-url"
-          />
-          <Input
-            type="number"
-            value={duration}
-            onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
-            placeholder="Duration (minutes)"
-            data-testid="input-duration"
-          />
-        </div>
+        <Input
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
+          placeholder="Video URL (YouTube, Vimeo, or direct link)"
+          data-testid={`input-lesson-video-${lesson.id}`}
+        />
       )}
-      <Textarea
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        placeholder="Lesson content..."
-        className="min-h-[100px]"
-        data-testid="input-lesson-content"
-      />
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onCancel} data-testid="button-cancel-lesson">
+
+      <div>
+        <label className="text-sm font-medium mb-2 block">Lesson Content</label>
+        <RichTextEditor
+          content={content}
+          onChange={setContent}
+          placeholder="Write your lesson content here..."
+        />
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Input
+          value={duration}
+          onChange={(e) => setDuration(e.target.value)}
+          placeholder="Duration (minutes)"
+          type="number"
+          className="w-40"
+          data-testid={`input-lesson-duration-${lesson.id}`}
+        />
+        <div className="flex-1" />
+        <Button variant="ghost" size="sm" onClick={onCancel} data-testid={`button-cancel-lesson-${lesson.id}`}>
           Cancel
         </Button>
         <Button
           size="sm"
-          onClick={() => onSave({ title, type, content, videoUrl, duration })}
+          onClick={() =>
+            onSave({
+              title,
+              type,
+              content,
+              videoUrl: type === "VIDEO" ? videoUrl : null,
+              duration: duration ? parseInt(duration) : null,
+            })
+          }
           disabled={isSaving}
-          data-testid="button-save-lesson"
+          data-testid={`button-save-lesson-${lesson.id}`}
         >
           {isSaving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
           Save Lesson

@@ -1,12 +1,13 @@
 import { db } from "./db";
 import { eq, and, desc, asc, ilike, sql, count } from "drizzle-orm";
 import {
-  users, courses, categories, chapters, lessons,
+  users, courses, categories, subjects, modules, lessons,
   enrollments, lessonProgress, reviews,
   type InsertUser, type User,
   type InsertCourse, type Course,
   type InsertCategory, type Category,
-  type InsertChapter, type Chapter,
+  type InsertSubject, type Subject,
+  type InsertModule, type Module,
   type InsertLesson, type Lesson,
   type InsertEnrollment, type Enrollment,
   type InsertLessonProgress, type LessonProgress,
@@ -18,25 +19,29 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getUsers(): Promise<User[]>;
-
   updateUserRole(id: number, role: string): Promise<User | undefined>;
 
   getCategories(): Promise<Category[]>;
   createCategory(category: InsertCategory): Promise<Category>;
 
-  getCourses(filters?: { search?: string; category?: string; level?: string; sort?: string; featured?: boolean; limit?: number }): Promise<any[]>;
+  getCourses(filters?: { search?: string; category?: string; level?: string; sort?: string; featured?: boolean; limit?: number; allStatuses?: boolean }): Promise<any[]>;
   getCourseBySlug(slug: string): Promise<any | undefined>;
   getCourseById(id: number): Promise<any | undefined>;
   createCourse(course: InsertCourse): Promise<Course>;
   updateCourse(id: number, data: Partial<InsertCourse>): Promise<Course | undefined>;
   getCoursesByInstructor(instructorId: number): Promise<any[]>;
 
-  getChaptersByCourse(courseId: number): Promise<Chapter[]>;
-  createChapter(chapter: InsertChapter): Promise<Chapter>;
-  updateChapter(id: number, data: Partial<InsertChapter>): Promise<Chapter | undefined>;
-  deleteChapter(id: number): Promise<void>;
+  getSubjectsByCourse(courseId: number): Promise<Subject[]>;
+  createSubject(subject: InsertSubject): Promise<Subject>;
+  updateSubject(id: number, data: Partial<InsertSubject>): Promise<Subject | undefined>;
+  deleteSubject(id: number): Promise<void>;
 
-  getLessonsByChapter(chapterId: number): Promise<Lesson[]>;
+  getModulesBySubject(subjectId: number): Promise<Module[]>;
+  createModule(mod: InsertModule): Promise<Module>;
+  updateModule(id: number, data: Partial<InsertModule>): Promise<Module | undefined>;
+  deleteModule(id: number): Promise<void>;
+
+  getLessonsByModule(moduleId: number): Promise<Lesson[]>;
   createLesson(lesson: InsertLesson): Promise<Lesson>;
   updateLesson(id: number, data: Partial<InsertLesson>): Promise<Lesson | undefined>;
   deleteLesson(id: number): Promise<void>;
@@ -88,11 +93,57 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getCourses(filters?: { search?: string; category?: string; level?: string; sort?: string; featured?: boolean; limit?: number }): Promise<any[]> {
+  private async getCourseFullData(course: Course) {
+    const courseSubjects = await db
+      .select()
+      .from(subjects)
+      .where(eq(subjects.courseId, course.id))
+      .orderBy(asc(subjects.position));
+
+    const subjectsWithModules = await Promise.all(
+      courseSubjects.map(async (subj) => {
+        const subjModules = await db
+          .select()
+          .from(modules)
+          .where(eq(modules.subjectId, subj.id))
+          .orderBy(asc(modules.position));
+
+        const modulesWithLessons = await Promise.all(
+          subjModules.map(async (mod) => {
+            const modLessons = await db
+              .select()
+              .from(lessons)
+              .where(eq(lessons.moduleId, mod.id))
+              .orderBy(asc(lessons.position));
+            return { ...mod, lessons: modLessons };
+          })
+        );
+
+        return { ...subj, modules: modulesWithLessons };
+      })
+    );
+
+    return subjectsWithModules;
+  }
+
+  private async getLessonCount(courseId: number): Promise<number> {
+    const courseSubjects = await db.select().from(subjects).where(eq(subjects.courseId, courseId));
+    let total = 0;
+    for (const subj of courseSubjects) {
+      const subjModules = await db.select().from(modules).where(eq(modules.subjectId, subj.id));
+      for (const mod of subjModules) {
+        const [lc] = await db.select({ count: count() }).from(lessons).where(eq(lessons.moduleId, mod.id));
+        total += lc.count;
+      }
+    }
+    return total;
+  }
+
+  async getCourses(filters?: { search?: string; category?: string; level?: string; sort?: string; featured?: boolean; limit?: number; allStatuses?: boolean }): Promise<any[]> {
     const allCourses = await db
       .select()
       .from(courses)
-      .where(eq(courses.status, "PUBLISHED"))
+      .where(filters?.allStatuses ? undefined : eq(courses.status, "PUBLISHED"))
       .orderBy(desc(courses.createdAt));
 
     const enriched = await Promise.all(
@@ -111,12 +162,7 @@ export class DatabaseStorage implements IStorage {
           .from(enrollments)
           .where(eq(enrollments.courseId, course.id));
 
-        const courseChapters = await db.select().from(chapters).where(eq(chapters.courseId, course.id));
-        let lessonCount = 0;
-        for (const ch of courseChapters) {
-          const [lc] = await db.select({ count: count() }).from(lessons).where(eq(lessons.chapterId, ch.id));
-          lessonCount += lc.count;
-        }
+        const lessonCount = await this.getLessonCount(course.id);
 
         const reviewList = await db.select().from(reviews).where(eq(reviews.courseId, course.id));
         const avgRating = reviewList.length > 0
@@ -180,22 +226,7 @@ export class DatabaseStorage implements IStorage {
       ? (await db.select().from(categories).where(eq(categories.id, course.categoryId)))[0]
       : null;
 
-    const courseChapters = await db
-      .select()
-      .from(chapters)
-      .where(eq(chapters.courseId, course.id))
-      .orderBy(asc(chapters.position));
-
-    const chaptersWithLessons = await Promise.all(
-      courseChapters.map(async (ch) => {
-        const chLessons = await db
-          .select()
-          .from(lessons)
-          .where(eq(lessons.chapterId, ch.id))
-          .orderBy(asc(lessons.position));
-        return { ...ch, lessons: chLessons };
-      })
-    );
+    const subjectsData = await this.getCourseFullData(course);
 
     const [enrollCount] = await db
       .select({ count: count() })
@@ -214,7 +245,7 @@ export class DatabaseStorage implements IStorage {
       ...course,
       instructor,
       category: cat,
-      chapters: chaptersWithLessons,
+      subjects: subjectsData,
       enrollmentCount: enrollCount.count,
       reviews: reviewsWithUsers,
     };
@@ -224,22 +255,7 @@ export class DatabaseStorage implements IStorage {
     const [course] = await db.select().from(courses).where(eq(courses.id, id));
     if (!course) return undefined;
 
-    const courseChapters = await db
-      .select()
-      .from(chapters)
-      .where(eq(chapters.courseId, course.id))
-      .orderBy(asc(chapters.position));
-
-    const chaptersWithLessons = await Promise.all(
-      courseChapters.map(async (ch) => {
-        const chLessons = await db
-          .select()
-          .from(lessons)
-          .where(eq(lessons.chapterId, ch.id))
-          .orderBy(asc(lessons.position));
-        return { ...ch, lessons: chLessons };
-      })
-    );
+    const subjectsData = await this.getCourseFullData(course);
 
     const [enrollCount] = await db
       .select({ count: count() })
@@ -248,7 +264,7 @@ export class DatabaseStorage implements IStorage {
 
     return {
       ...course,
-      chapters: chaptersWithLessons,
+      subjects: subjectsData,
       enrollmentCount: enrollCount?.count || 0,
     };
   }
@@ -281,26 +297,44 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
-  async getChaptersByCourse(courseId: number): Promise<Chapter[]> {
-    return db.select().from(chapters).where(eq(chapters.courseId, courseId)).orderBy(asc(chapters.position));
+  async getSubjectsByCourse(courseId: number): Promise<Subject[]> {
+    return db.select().from(subjects).where(eq(subjects.courseId, courseId)).orderBy(asc(subjects.position));
   }
 
-  async createChapter(chapter: InsertChapter): Promise<Chapter> {
-    const [created] = await db.insert(chapters).values(chapter).returning();
+  async createSubject(subject: InsertSubject): Promise<Subject> {
+    const [created] = await db.insert(subjects).values(subject).returning();
     return created;
   }
 
-  async updateChapter(id: number, data: Partial<InsertChapter>): Promise<Chapter | undefined> {
-    const [updated] = await db.update(chapters).set(data).where(eq(chapters.id, id)).returning();
+  async updateSubject(id: number, data: Partial<InsertSubject>): Promise<Subject | undefined> {
+    const [updated] = await db.update(subjects).set(data).where(eq(subjects.id, id)).returning();
     return updated;
   }
 
-  async deleteChapter(id: number): Promise<void> {
-    await db.delete(chapters).where(eq(chapters.id, id));
+  async deleteSubject(id: number): Promise<void> {
+    await db.delete(subjects).where(eq(subjects.id, id));
   }
 
-  async getLessonsByChapter(chapterId: number): Promise<Lesson[]> {
-    return db.select().from(lessons).where(eq(lessons.chapterId, chapterId)).orderBy(asc(lessons.position));
+  async getModulesBySubject(subjectId: number): Promise<Module[]> {
+    return db.select().from(modules).where(eq(modules.subjectId, subjectId)).orderBy(asc(modules.position));
+  }
+
+  async createModule(mod: InsertModule): Promise<Module> {
+    const [created] = await db.insert(modules).values(mod).returning();
+    return created;
+  }
+
+  async updateModule(id: number, data: Partial<InsertModule>): Promise<Module | undefined> {
+    const [updated] = await db.update(modules).set(data).where(eq(modules.id, id)).returning();
+    return updated;
+  }
+
+  async deleteModule(id: number): Promise<void> {
+    await db.delete(modules).where(eq(modules.id, id));
+  }
+
+  async getLessonsByModule(moduleId: number): Promise<Lesson[]> {
+    return db.select().from(lessons).where(eq(lessons.moduleId, moduleId)).orderBy(asc(lessons.position));
   }
 
   async createLesson(lesson: InsertLesson): Promise<Lesson> {
@@ -390,7 +424,6 @@ export class DatabaseStorage implements IStorage {
 
   async getAdminStats(instructorId: number): Promise<any> {
     const instructorCourses = await db.select().from(courses).where(eq(courses.instructorId, instructorId));
-    const courseIds = instructorCourses.map((c) => c.id);
 
     let enrollmentCount = 0;
     let studentSet = new Set<number>();

@@ -105,9 +105,11 @@ export default function CourseDetailPage() {
     }
   };
 
-  const totalLessons = course.chapters?.reduce((acc: number, ch: any) => acc + (ch.lessons?.length || 0), 0) || 0;
-  const totalDuration = course.chapters?.reduce((acc: number, ch: any) =>
-    acc + (ch.lessons?.reduce((a: number, l: any) => a + (l.duration || 0), 0) || 0), 0) || 0;
+  const totalLessons = course.subjects?.reduce((acc: number, subj: any) =>
+    acc + (subj.modules?.reduce((a: number, mod: any) => a + (mod.lessons?.length || 0), 0) || 0), 0) || 0;
+  const totalDuration = course.subjects?.reduce((acc: number, subj: any) =>
+    acc + (subj.modules?.reduce((a: number, mod: any) =>
+      a + (mod.lessons?.reduce((x: number, l: any) => x + (l.duration || 0), 0) || 0), 0) || 0), 0) || 0;
 
   return (
     <div className="min-h-screen">
@@ -193,49 +195,58 @@ export default function CourseDetailPage() {
               </div>
             )}
 
-            {course.chapters && course.chapters.length > 0 && (
+            {course.subjects && course.subjects.length > 0 && (
               <div>
                 <h2 className="text-xl font-bold mb-4">Curriculum</h2>
-                <Accordion type="multiple" className="space-y-2">
-                  {course.chapters
+                <div className="space-y-4">
+                  {course.subjects
                     .sort((a: any, b: any) => a.position - b.position)
-                    .map((chapter: any) => (
-                      <AccordionItem key={chapter.id} value={`ch-${chapter.id}`} className="border rounded-md px-4">
-                        <AccordionTrigger className="text-sm font-medium" data-testid={`accordion-chapter-${chapter.id}`}>
-                          <div className="flex items-center gap-2">
-                            <span>{chapter.title}</span>
-                            <Badge variant="outline" className="ml-2 text-xs no-default-active-elevate">
-                              {chapter.lessons?.length || 0} lessons
-                            </Badge>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          <div className="space-y-1 pb-2">
-                            {chapter.lessons
-                              ?.sort((a: any, b: any) => a.position - b.position)
-                              .map((lesson: any) => (
-                                <div
-                                  key={lesson.id}
-                                  className="flex items-center gap-3 py-2 px-2 rounded-md text-sm"
-                                  data-testid={`lesson-item-${lesson.id}`}
-                                >
-                                  {lessonTypeIcon(lesson.type)}
-                                  <span className="flex-1">{lesson.title}</span>
-                                  {lesson.duration && (
-                                    <span className="text-xs text-muted-foreground">{lesson.duration}m</span>
-                                  )}
-                                  {lesson.isFree || lesson.isPreview ? (
-                                    <Badge variant="outline" className="text-xs no-default-active-elevate">Preview</Badge>
-                                  ) : (
-                                    <Lock className="h-3 w-3 text-muted-foreground" />
-                                  )}
-                                </div>
-                              ))}
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
+                    .map((subject: any) => (
+                      <div key={subject.id}>
+                        <h3 className="text-base font-semibold mb-2" data-testid={`text-subject-${subject.id}`}>{subject.title}</h3>
+                        <Accordion type="multiple" className="space-y-2">
+                          {subject.modules
+                            ?.sort((a: any, b: any) => a.position - b.position)
+                            .map((mod: any) => (
+                              <AccordionItem key={mod.id} value={`mod-${mod.id}`} className="border rounded-md px-4">
+                                <AccordionTrigger className="text-sm font-medium" data-testid={`accordion-module-${mod.id}`}>
+                                  <div className="flex items-center gap-2">
+                                    <span>{mod.title}</span>
+                                    <Badge variant="outline" className="ml-2 text-xs no-default-active-elevate">
+                                      {mod.lessons?.length || 0} lessons
+                                    </Badge>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                  <div className="space-y-1 pb-2">
+                                    {mod.lessons
+                                      ?.sort((a: any, b: any) => a.position - b.position)
+                                      .map((lesson: any) => (
+                                        <div
+                                          key={lesson.id}
+                                          className="flex items-center gap-3 py-2 px-2 rounded-md text-sm"
+                                          data-testid={`lesson-item-${lesson.id}`}
+                                        >
+                                          {lessonTypeIcon(lesson.type)}
+                                          <span className="flex-1">{lesson.title}</span>
+                                          {lesson.duration && (
+                                            <span className="text-xs text-muted-foreground">{lesson.duration}m</span>
+                                          )}
+                                          {lesson.isFree || lesson.isPreview ? (
+                                            <Badge variant="outline" className="text-xs no-default-active-elevate">Preview</Badge>
+                                          ) : (
+                                            <Lock className="h-3 w-3 text-muted-foreground" />
+                                          )}
+                                        </div>
+                                      ))}
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            ))}
+                        </Accordion>
+                      </div>
                     ))}
-                </Accordion>
+                </div>
               </div>
             )}
 

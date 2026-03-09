@@ -61,12 +61,20 @@ export const courses = pgTable("courses", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const chapters = pgTable("chapters", {
+export const subjects = pgTable("subjects", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description"),
   position: integer("position").notNull().default(0),
   courseId: integer("course_id").references(() => courses.id, { onDelete: "cascade" }).notNull(),
+});
+
+export const modules = pgTable("modules", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  position: integer("position").notNull().default(0),
+  subjectId: integer("subject_id").references(() => subjects.id, { onDelete: "cascade" }).notNull(),
 });
 
 export const lessons = pgTable("lessons", {
@@ -75,7 +83,7 @@ export const lessons = pgTable("lessons", {
   description: text("description"),
   type: lessonTypeEnum("type").notNull().default("TEXT"),
   position: integer("position").notNull().default(0),
-  chapterId: integer("chapter_id").references(() => chapters.id, { onDelete: "cascade" }).notNull(),
+  moduleId: integer("module_id").references(() => modules.id, { onDelete: "cascade" }).notNull(),
   duration: integer("duration"),
   content: text("content"),
   videoUrl: text("video_url"),
@@ -113,7 +121,8 @@ export const reviews = pgTable("reviews", {
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertCategorySchema = createInsertSchema(categories).omit({ id: true });
 export const insertCourseSchema = createInsertSchema(courses).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertChapterSchema = createInsertSchema(chapters).omit({ id: true });
+export const insertSubjectSchema = createInsertSchema(subjects).omit({ id: true });
+export const insertModuleSchema = createInsertSchema(modules).omit({ id: true });
 export const insertLessonSchema = createInsertSchema(lessons).omit({ id: true });
 export const insertEnrollmentSchema = createInsertSchema(enrollments).omit({ id: true, enrolledAt: true, completedAt: true });
 export const insertLessonProgressSchema = createInsertSchema(lessonProgress).omit({ id: true, completedAt: true });
@@ -125,8 +134,10 @@ export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Category = typeof categories.$inferSelect;
 export type InsertCourse = z.infer<typeof insertCourseSchema>;
 export type Course = typeof courses.$inferSelect;
-export type InsertChapter = z.infer<typeof insertChapterSchema>;
-export type Chapter = typeof chapters.$inferSelect;
+export type InsertSubject = z.infer<typeof insertSubjectSchema>;
+export type Subject = typeof subjects.$inferSelect;
+export type InsertModule = z.infer<typeof insertModuleSchema>;
+export type Module = typeof modules.$inferSelect;
 export type InsertLesson = z.infer<typeof insertLessonSchema>;
 export type Lesson = typeof lessons.$inferSelect;
 export type InsertEnrollment = z.infer<typeof insertEnrollmentSchema>;

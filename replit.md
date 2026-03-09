@@ -8,6 +8,7 @@ LearnEngine is a full-stack online course platform (Thinkific-style) where instr
 - **Backend**: Express.js + TypeScript
 - **Database**: PostgreSQL with Drizzle ORM
 - **Auth**: Session-based authentication with scrypt password hashing
+- **Rich Text**: TipTap editor (headings, text styles, images, YouTube videos)
 
 ## Project Structure
 ```
@@ -20,6 +21,7 @@ client/src/
     footer.tsx      - Footer
     course-card.tsx - Reusable course card
     theme-provider.tsx - Dark/light theme
+    rich-text-editor.tsx - TipTap rich text editor component
   pages/
     home.tsx        - Landing page
     auth.tsx        - Login/Register
@@ -30,7 +32,7 @@ client/src/
     admin/
       index.tsx     - Admin dashboard
       setup.tsx     - Super admin setup page
-      course-editor.tsx - Course builder/editor
+      course-editor.tsx - Course builder/editor (3-level hierarchy)
       students.tsx  - Student management
       users.tsx     - User role management
 
@@ -42,32 +44,33 @@ server/
   seed.ts           - Seed data
 
 shared/
-  schema.ts         - Drizzle schema (users, courses, chapters, lessons, enrollments, etc.)
+  schema.ts         - Drizzle schema (3-level hierarchy)
 ```
 
-## Key Features (MVP)
-- User authentication (register/login/logout)
-- Course catalog with search, filters (category, level), sort
-- Course detail pages with curriculum outline
-- Student enrollment and progress tracking
-- Course player with lesson navigation and completion
-- Super admin setup (/admin/setup) using ADMIN_SECRET env var
-- Admin dashboard with course management
-- Course builder (create/edit courses, chapters, lessons)
-- User management (/admin/users) - admins can change user roles
-- Student management
-- Dark/light theme toggle
-- Responsive design
+## Content Hierarchy
+Course → Subject → Module → Lesson (3-level structure)
+- **Subject**: Top-level grouping within a course (e.g., "Foundations", "Frontend Development")
+- **Module**: Second-level grouping within a subject (e.g., "Getting Started", "CSS & Layout")
+- **Lesson**: Individual content unit with rich text (HTML) content and optional video
 
 ## Database Models
 - users (ADMIN, INSTRUCTOR, STUDENT roles)
 - categories
 - courses (with status: DRAFT, PUBLISHED, ARCHIVED)
-- chapters (ordered by position)
-- lessons (VIDEO, TEXT types)
+- subjects (course_id, position, cascade delete)
+- modules (subject_id, position, cascade delete)
+- lessons (module_id, VIDEO/TEXT types, HTML content via TipTap)
 - enrollments (progress tracking)
 - lesson_progress (per-lesson completion)
 - reviews
+
+## Key API Routes
+- Auth: /api/auth/login, /api/auth/register, /api/auth/me, /api/auth/logout
+- Courses: /api/courses, /api/courses/:slug
+- Enrollment: /api/courses/:id/enroll, /api/enrollments, /api/enrollments/check/:slug
+- Learning: /api/learn/:slug, /api/lessons/:id/complete
+- Admin: /api/admin/courses, /api/admin/subjects, /api/admin/modules, /api/admin/lessons
+- Users: /api/admin/users, /api/admin/users/:id/role
 
 ## Admin Setup
 - Navigate to /admin/setup while logged in
@@ -81,6 +84,16 @@ shared/
 - Student: student / student123
 
 ## Environment Variables
-- ADMIN_SECRET: Secret key for promoting accounts to super admin
+- ADMIN_SECRET: Secret key for promoting accounts to super admin (learnengine-super-admin-2026)
 - SESSION_SECRET: Express session secret
 - DATABASE_URL: PostgreSQL connection string
+
+## TipTap Editor Features
+- Text formatting: Bold, Italic, Underline, Strikethrough
+- Headings: H1, H2, H3
+- Text alignment: Left, Center, Right
+- Lists: Bullet, Ordered
+- Blockquote, Code Block, Horizontal Rule
+- Image insertion (URL)
+- YouTube video embedding
+- Undo/Redo

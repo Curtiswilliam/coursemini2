@@ -1,6 +1,6 @@
 import { storage } from "./storage";
 import { db } from "./db";
-import { users, categories, courses, chapters, lessons } from "@shared/schema";
+import { users } from "@shared/schema";
 import { count } from "drizzle-orm";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
@@ -69,7 +69,7 @@ export async function seedDatabase() {
   const course1 = await storage.createCourse({
     title: "Modern Web Development Masterclass",
     slug: "modern-web-development-masterclass",
-    description: "Learn to build full-stack web applications from scratch using the latest technologies. This comprehensive course covers HTML5, CSS3, JavaScript ES6+, React, Node.js, and deployment strategies.\n\nYou'll work through real-world projects, building a portfolio of applications that demonstrate your skills to potential employers. By the end of this course, you'll be confident building and deploying production-ready web applications.",
+    description: "Learn to build full-stack web applications from scratch using the latest technologies. This comprehensive course covers HTML5, CSS3, JavaScript ES6+, React, Node.js, and deployment strategies.",
     shortDescription: "Master full-stack web development with React, Node.js, and modern tools",
     thumbnail: "/images/course-webdev.png",
     price: 0,
@@ -86,7 +86,7 @@ export async function seedDatabase() {
   const course2 = await storage.createCourse({
     title: "UI/UX Design Fundamentals",
     slug: "ui-ux-design-fundamentals",
-    description: "Discover the principles of great user interface and experience design. Learn wireframing, prototyping, user research, and visual design using industry-standard tools like Figma.\n\nThis course takes you from beginner to job-ready designer through hands-on projects and real-world case studies.",
+    description: "Discover the principles of great user interface and experience design. Learn wireframing, prototyping, user research, and visual design using industry-standard tools like Figma.",
     shortDescription: "Learn design thinking, wireframing, and prototyping with Figma",
     thumbnail: "/images/course-design.png",
     price: 49.99,
@@ -102,7 +102,7 @@ export async function seedDatabase() {
   const course3 = await storage.createCourse({
     title: "Data Science with Python",
     slug: "data-science-with-python",
-    description: "Dive into the world of data science using Python. Learn pandas, NumPy, matplotlib, scikit-learn, and more through practical projects with real datasets.\n\nFrom data cleaning to machine learning models, this course covers the complete data science workflow.",
+    description: "Dive into the world of data science using Python. Learn pandas, NumPy, matplotlib, scikit-learn, and more through practical projects with real datasets.",
     shortDescription: "Master data analysis and machine learning with Python",
     thumbnail: "/images/course-data.png",
     price: 79.99,
@@ -112,7 +112,7 @@ export async function seedDatabase() {
     level: "INTERMEDIATE",
     language: "English",
     isFree: false,
-    learningOutcomes: "Analyze data with pandas and NumPy\nCreate visualizations with matplotlib and seaborn\nBuild machine learning models with scikit-learn\nPerform statistical analysis\nWork with real-world datasets",
+    learningOutcomes: "Analyze data with pandas and NumPy\nCreate visualizations with matplotlib and seaborn\nBuild machine learning models with scikit-learn",
     prerequisites: "Basic Python knowledge\nHigh school math",
   });
 
@@ -129,13 +129,13 @@ export async function seedDatabase() {
     level: "BEGINNER",
     language: "English",
     isFree: true,
-    learningOutcomes: "Develop a digital marketing strategy\nOptimize websites for search engines\nCreate engaging social media content\nBuild email marketing campaigns\nMeasure and analyze campaign performance",
+    learningOutcomes: "Develop a digital marketing strategy\nOptimize websites for search engines\nCreate engaging social media content",
   });
 
   const course5 = await storage.createCourse({
     title: "React Native Mobile Development",
     slug: "react-native-mobile-development",
-    description: "Build cross-platform mobile apps with React Native. Learn to create beautiful, performant iOS and Android apps from a single codebase using JavaScript and React patterns you already know.",
+    description: "Build cross-platform mobile apps with React Native. Learn to create beautiful, performant iOS and Android apps from a single codebase.",
     shortDescription: "Build iOS and Android apps with React Native",
     thumbnail: "/images/course-mobile.png",
     price: 59.99,
@@ -145,49 +145,59 @@ export async function seedDatabase() {
     level: "INTERMEDIATE",
     language: "English",
     isFree: false,
-    learningOutcomes: "Set up a React Native development environment\nBuild cross-platform mobile UIs\nHandle navigation and state management\nIntegrate with native device features\nPublish apps to App Store and Google Play",
+    learningOutcomes: "Set up a React Native development environment\nBuild cross-platform mobile UIs\nHandle navigation and state management",
     prerequisites: "JavaScript fundamentals\nBasic React knowledge",
   });
 
-  // Add chapters and lessons for course 1
-  const ch1_1 = await storage.createChapter({ courseId: course1.id, title: "Getting Started", position: 0 });
-  const ch1_2 = await storage.createChapter({ courseId: course1.id, title: "HTML & CSS Fundamentals", position: 1 });
-  const ch1_3 = await storage.createChapter({ courseId: course1.id, title: "JavaScript Deep Dive", position: 2 });
-  const ch1_4 = await storage.createChapter({ courseId: course1.id, title: "React Framework", position: 3 });
+  // Course 1: Web Dev - Subject > Module > Lesson hierarchy
+  const subj1_1 = await storage.createSubject({ courseId: course1.id, title: "Foundations", position: 0, description: "Core web development concepts" });
+  const subj1_2 = await storage.createSubject({ courseId: course1.id, title: "Frontend Development", position: 1, description: "Building user interfaces" });
+  const subj1_3 = await storage.createSubject({ courseId: course1.id, title: "JavaScript & React", position: 2, description: "Programming and frameworks" });
 
-  await storage.createLesson({ chapterId: ch1_1.id, title: "Welcome to the Course", type: "TEXT", position: 0, content: "Welcome to the Modern Web Development Masterclass! In this course, you'll learn everything you need to know to become a full-stack web developer.\n\nWe'll start with the fundamentals and progressively build up to complex applications. By the end, you'll have built several real-world projects for your portfolio.\n\nLet's get started!", duration: 5, isFree: true, isPreview: true });
-  await storage.createLesson({ chapterId: ch1_1.id, title: "Setting Up Your Development Environment", type: "TEXT", position: 1, content: "Before we start coding, let's set up your development environment.\n\n1. Install Visual Studio Code from https://code.visualstudio.com\n2. Install Node.js from https://nodejs.org (LTS version)\n3. Install Git from https://git-scm.com\n4. Create a GitHub account at https://github.com\n\nRecommended VS Code Extensions:\n- ESLint\n- Prettier\n- Auto Rename Tag\n- Live Server\n- GitLens", duration: 10 });
-  await storage.createLesson({ chapterId: ch1_1.id, title: "How the Web Works", type: "TEXT", position: 2, content: "Understanding how the web works is fundamental to web development.\n\nThe Client-Server Model:\nWhen you visit a website, your browser (the client) sends a request to a web server. The server processes the request and sends back a response, which your browser then renders.\n\nHTTP Protocol:\nHTTP (Hypertext Transfer Protocol) is the foundation of data communication on the web. Common methods include:\n- GET: Retrieve data\n- POST: Send data\n- PUT: Update data\n- DELETE: Remove data\n\nDNS (Domain Name System):\nDNS translates domain names (like google.com) into IP addresses that computers use to identify each other on the network.", duration: 15 });
+  const mod1_1_1 = await storage.createModule({ subjectId: subj1_1.id, title: "Getting Started", position: 0 });
+  const mod1_1_2 = await storage.createModule({ subjectId: subj1_1.id, title: "How the Web Works", position: 1 });
+  const mod1_2_1 = await storage.createModule({ subjectId: subj1_2.id, title: "HTML Essentials", position: 0 });
+  const mod1_2_2 = await storage.createModule({ subjectId: subj1_2.id, title: "CSS & Layout", position: 1 });
+  const mod1_3_1 = await storage.createModule({ subjectId: subj1_3.id, title: "JavaScript Fundamentals", position: 0 });
+  const mod1_3_2 = await storage.createModule({ subjectId: subj1_3.id, title: "React Framework", position: 1 });
 
-  await storage.createLesson({ chapterId: ch1_2.id, title: "HTML Document Structure", type: "TEXT", position: 0, content: "HTML (HyperText Markup Language) is the standard markup language for creating web pages.\n\nBasic Structure:\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <title>My Page</title>\n</head>\n<body>\n  <h1>Hello World</h1>\n  <p>This is my first web page.</p>\n</body>\n</html>\n\nKey HTML5 Semantic Elements:\n- <header> - Page or section header\n- <nav> - Navigation links\n- <main> - Main content area\n- <section> - Thematic grouping\n- <article> - Self-contained content\n- <footer> - Page or section footer", duration: 20 });
-  await storage.createLesson({ chapterId: ch1_2.id, title: "CSS Styling & Layout", type: "TEXT", position: 1, content: "CSS (Cascading Style Sheets) controls the visual presentation of HTML elements.\n\nThe Box Model:\nEvery element is a box consisting of:\n- Content: The actual content\n- Padding: Space around the content\n- Border: A border around the padding\n- Margin: Space outside the border\n\nFlexbox Layout:\nFlexbox is a one-dimensional layout method:\n.container {\n  display: flex;\n  justify-content: center;\n  align-items: center;\n  gap: 1rem;\n}\n\nCSS Grid:\nGrid is a two-dimensional layout system:\n.grid {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 1rem;\n}", duration: 25 });
-  await storage.createLesson({ chapterId: ch1_2.id, title: "Responsive Design", type: "TEXT", position: 2, content: "Responsive design ensures your website looks great on all devices.\n\nMedia Queries:\n@media (max-width: 768px) {\n  .sidebar { display: none; }\n  .main { width: 100%; }\n}\n\nMobile-First Approach:\nStart designing for mobile screens first, then add complexity for larger screens using min-width media queries.\n\nKey Techniques:\n- Relative units (%, em, rem, vw, vh)\n- Flexible images (max-width: 100%)\n- CSS Grid and Flexbox\n- Viewport meta tag", duration: 20 });
+  await storage.createLesson({ moduleId: mod1_1_1.id, title: "Welcome to the Course", type: "TEXT", position: 0, content: "<h2>Welcome to the Modern Web Development Masterclass!</h2><p>In this course, you'll learn everything you need to know to become a full-stack web developer.</p><p>We'll start with the fundamentals and progressively build up to complex applications. By the end, you'll have built several real-world projects for your portfolio.</p><p><strong>Let's get started!</strong></p>", duration: 5, isFree: true, isPreview: true });
+  await storage.createLesson({ moduleId: mod1_1_1.id, title: "Setting Up Your Environment", type: "TEXT", position: 1, content: "<h2>Development Environment Setup</h2><p>Before we start coding, let's set up your development environment.</p><h3>Required Tools</h3><ol><li>Install <strong>Visual Studio Code</strong> from code.visualstudio.com</li><li>Install <strong>Node.js</strong> from nodejs.org (LTS version)</li><li>Install <strong>Git</strong> from git-scm.com</li><li>Create a <strong>GitHub</strong> account at github.com</li></ol><h3>Recommended VS Code Extensions</h3><ul><li>ESLint</li><li>Prettier</li><li>Auto Rename Tag</li><li>Live Server</li></ul>", duration: 10 });
+  await storage.createLesson({ moduleId: mod1_1_2.id, title: "How the Web Works", type: "TEXT", position: 0, content: "<h2>Understanding the Web</h2><p>Understanding how the web works is fundamental to web development.</p><h3>The Client-Server Model</h3><p>When you visit a website, your browser (the client) sends a request to a web server. The server processes the request and sends back a response.</p><h3>HTTP Protocol</h3><p>HTTP is the foundation of data communication on the web. Common methods include:</p><ul><li><strong>GET</strong> - Retrieve data</li><li><strong>POST</strong> - Send data</li><li><strong>PUT</strong> - Update data</li><li><strong>DELETE</strong> - Remove data</li></ul>", duration: 15 });
 
-  await storage.createLesson({ chapterId: ch1_3.id, title: "JavaScript Fundamentals", type: "TEXT", position: 0, content: "JavaScript is the programming language of the web.\n\nVariables:\nlet name = 'John';\nconst age = 30;\n\nData Types:\n- String: 'Hello'\n- Number: 42\n- Boolean: true/false\n- Array: [1, 2, 3]\n- Object: { key: 'value' }\n- null, undefined\n\nFunctions:\nfunction greet(name) {\n  return `Hello, ${name}!`;\n}\n\nconst add = (a, b) => a + b;", duration: 30 });
-  await storage.createLesson({ chapterId: ch1_3.id, title: "DOM Manipulation", type: "TEXT", position: 1, content: "The Document Object Model (DOM) allows JavaScript to interact with HTML elements.\n\nSelecting Elements:\nconst element = document.getElementById('myId');\nconst elements = document.querySelectorAll('.myClass');\n\nModifying Elements:\nelement.textContent = 'New text';\nelement.style.color = 'blue';\nelement.classList.add('active');\n\nEvent Handling:\nbutton.addEventListener('click', (event) => {\n  console.log('Button clicked!');\n});", duration: 25 });
-  await storage.createLesson({ chapterId: ch1_3.id, title: "Async JavaScript & APIs", type: "TEXT", position: 2, content: "Asynchronous JavaScript allows you to perform operations without blocking the main thread.\n\nPromises:\nfetch('https://api.example.com/data')\n  .then(response => response.json())\n  .then(data => console.log(data))\n  .catch(error => console.error(error));\n\nAsync/Await:\nasync function fetchData() {\n  try {\n    const response = await fetch('/api/data');\n    const data = await response.json();\n    return data;\n  } catch (error) {\n    console.error('Error:', error);\n  }\n}", duration: 30 });
+  await storage.createLesson({ moduleId: mod1_2_1.id, title: "HTML Document Structure", type: "TEXT", position: 0, content: "<h2>HTML Basics</h2><p>HTML (HyperText Markup Language) is the standard markup language for creating web pages.</p><h3>Key HTML5 Semantic Elements</h3><ul><li><code>&lt;header&gt;</code> - Page or section header</li><li><code>&lt;nav&gt;</code> - Navigation links</li><li><code>&lt;main&gt;</code> - Main content area</li><li><code>&lt;section&gt;</code> - Thematic grouping</li><li><code>&lt;article&gt;</code> - Self-contained content</li><li><code>&lt;footer&gt;</code> - Page or section footer</li></ul>", duration: 20 });
+  await storage.createLesson({ moduleId: mod1_2_2.id, title: "CSS Styling & Layout", type: "TEXT", position: 0, content: "<h2>CSS Fundamentals</h2><p>CSS controls the visual presentation of HTML elements.</p><h3>The Box Model</h3><p>Every element consists of: <strong>Content → Padding → Border → Margin</strong></p><h3>Flexbox Layout</h3><p>Flexbox is a one-dimensional layout method for arranging items in rows or columns.</p><h3>CSS Grid</h3><p>Grid is a two-dimensional layout system for complex page layouts.</p>", duration: 25 });
+  await storage.createLesson({ moduleId: mod1_2_2.id, title: "Responsive Design", type: "TEXT", position: 1, content: "<h2>Making Sites Responsive</h2><p>Responsive design ensures your website looks great on all devices.</p><h3>Key Techniques</h3><ul><li>Relative units (%, em, rem, vw, vh)</li><li>Flexible images (max-width: 100%)</li><li>CSS Grid and Flexbox</li><li>Mobile-first approach</li></ul>", duration: 20 });
 
-  await storage.createLesson({ chapterId: ch1_4.id, title: "Introduction to React", type: "TEXT", position: 0, content: "React is a JavaScript library for building user interfaces.\n\nComponents:\nfunction Welcome({ name }) {\n  return <h1>Hello, {name}!</h1>;\n}\n\nJSX:\nJSX is a syntax extension that allows you to write HTML-like code in JavaScript.\n\nState:\nconst [count, setCount] = useState(0);\n\nProps:\nComponents receive data through props, which are read-only.", duration: 25, isFree: true, isPreview: true });
-  await storage.createLesson({ chapterId: ch1_4.id, title: "React Hooks & State Management", type: "TEXT", position: 1, content: "React Hooks let you use state and other features in functional components.\n\nuseState:\nconst [value, setValue] = useState(initialValue);\n\nuseEffect:\nuseEffect(() => {\n  // Side effect code\n  return () => {\n    // Cleanup\n  };\n}, [dependencies]);\n\nuseContext:\nconst ThemeContext = createContext('light');\nconst theme = useContext(ThemeContext);\n\nCustom Hooks:\nfunction useLocalStorage(key, initialValue) {\n  const [stored, setStored] = useState(() => {\n    const item = localStorage.getItem(key);\n    return item ? JSON.parse(item) : initialValue;\n  });\n  return [stored, setStored];\n}", duration: 30 });
+  await storage.createLesson({ moduleId: mod1_3_1.id, title: "JavaScript Basics", type: "TEXT", position: 0, content: "<h2>JavaScript Fundamentals</h2><p>JavaScript is the programming language of the web.</p><h3>Variables & Data Types</h3><p>JavaScript has several data types: <strong>String, Number, Boolean, Array, Object</strong></p><h3>Functions</h3><p>Functions are reusable blocks of code. Use <code>function</code> declarations or arrow functions <code>=></code></p>", duration: 30 });
+  await storage.createLesson({ moduleId: mod1_3_1.id, title: "Async JavaScript & APIs", type: "TEXT", position: 1, content: "<h2>Asynchronous Programming</h2><p>Async JavaScript allows operations without blocking the main thread.</p><h3>Promises</h3><p>Promises represent the eventual result of an asynchronous operation.</p><h3>Async/Await</h3><p>A cleaner syntax for working with promises using <code>async</code> and <code>await</code> keywords.</p>", duration: 30 });
+  await storage.createLesson({ moduleId: mod1_3_2.id, title: "Introduction to React", type: "TEXT", position: 0, content: "<h2>Getting Started with React</h2><p>React is a JavaScript library for building user interfaces.</p><h3>Core Concepts</h3><ul><li><strong>Components</strong> - Reusable building blocks</li><li><strong>JSX</strong> - HTML-like syntax in JavaScript</li><li><strong>Props</strong> - Passing data to components</li><li><strong>State</strong> - Managing component data</li></ul>", duration: 25, isFree: true, isPreview: true });
+  await storage.createLesson({ moduleId: mod1_3_2.id, title: "React Hooks & State", type: "TEXT", position: 1, content: "<h2>React Hooks</h2><p>Hooks let you use state and other features in functional components.</p><h3>Essential Hooks</h3><ul><li><strong>useState</strong> - Manage component state</li><li><strong>useEffect</strong> - Handle side effects</li><li><strong>useContext</strong> - Access context values</li><li><strong>useRef</strong> - Reference DOM elements</li></ul>", duration: 30 });
 
-  // Add chapters and lessons for course 2
-  const ch2_1 = await storage.createChapter({ courseId: course2.id, title: "Design Thinking", position: 0 });
-  const ch2_2 = await storage.createChapter({ courseId: course2.id, title: "Figma Essentials", position: 1 });
+  // Course 2: UI/UX Design
+  const subj2_1 = await storage.createSubject({ courseId: course2.id, title: "Design Thinking", position: 0 });
+  const subj2_2 = await storage.createSubject({ courseId: course2.id, title: "Figma Essentials", position: 1 });
 
-  await storage.createLesson({ chapterId: ch2_1.id, title: "What is UX Design?", type: "TEXT", position: 0, content: "User Experience (UX) Design focuses on creating products that provide meaningful and relevant experiences to users.\n\nThe 5 Elements of UX:\n1. Strategy - User needs and business objectives\n2. Scope - Features and content requirements\n3. Structure - Interaction design and information architecture\n4. Skeleton - Interface, navigation, and information design\n5. Surface - Visual design\n\nUX is not just about how something looks, but how it works and how it makes users feel.", duration: 15, isFree: true, isPreview: true });
-  await storage.createLesson({ chapterId: ch2_1.id, title: "User Research Methods", type: "TEXT", position: 1, content: "Understanding your users is the foundation of great design.\n\nQualitative Methods:\n- User interviews\n- Contextual inquiry\n- Focus groups\n- Diary studies\n\nQuantitative Methods:\n- Surveys\n- Analytics\n- A/B testing\n- Card sorting\n\nCreating User Personas:\nA persona is a fictional representation of your ideal user based on research data. Include demographics, goals, frustrations, and behaviors.", duration: 20 });
-  await storage.createLesson({ chapterId: ch2_2.id, title: "Getting Started with Figma", type: "TEXT", position: 0, content: "Figma is a powerful, browser-based design tool used by professionals worldwide.\n\nKey Features:\n- Vector editing tools\n- Component system\n- Auto Layout\n- Design tokens\n- Prototyping\n- Collaboration\n\nSetting Up:\n1. Create a free account at figma.com\n2. Install the desktop app (optional)\n3. Explore the community for templates\n\nWorkspace Organization:\n- Teams for collaboration\n- Projects for grouping files\n- Pages within files for different stages", duration: 15 });
-  await storage.createLesson({ chapterId: ch2_2.id, title: "Components & Design Systems", type: "TEXT", position: 1, content: "Design systems ensure consistency across your products.\n\nAtomic Design Methodology:\n1. Atoms - Basic elements (buttons, inputs, icons)\n2. Molecules - Simple groups (search bar = input + button)\n3. Organisms - Complex sections (navigation bar)\n4. Templates - Page layouts\n5. Pages - Final implementations\n\nFigma Components:\n- Create reusable components with variants\n- Use auto layout for responsive behavior\n- Define design tokens for colors, typography, spacing\n- Build a component library for your team", duration: 25 });
+  const mod2_1_1 = await storage.createModule({ subjectId: subj2_1.id, title: "UX Foundations", position: 0 });
+  const mod2_2_1 = await storage.createModule({ subjectId: subj2_2.id, title: "Getting Started with Figma", position: 0 });
 
-  // Seed some chapters for other courses
-  const ch3_1 = await storage.createChapter({ courseId: course3.id, title: "Python for Data Science", position: 0 });
-  await storage.createLesson({ chapterId: ch3_1.id, title: "Setting Up Python Environment", type: "TEXT", position: 0, content: "Let's set up your Python data science environment.\n\n1. Install Anaconda distribution\n2. Create a virtual environment\n3. Install key packages: pandas, numpy, matplotlib, seaborn, scikit-learn\n4. Set up Jupyter Notebook\n\nJupyter Notebook is an interactive environment perfect for data exploration and analysis.", duration: 15, isFree: true, isPreview: true });
+  await storage.createLesson({ moduleId: mod2_1_1.id, title: "What is UX Design?", type: "TEXT", position: 0, content: "<h2>Understanding UX Design</h2><p>User Experience Design focuses on creating products that provide meaningful experiences.</p><h3>The 5 Elements of UX</h3><ol><li><strong>Strategy</strong> - User needs and business objectives</li><li><strong>Scope</strong> - Features and content requirements</li><li><strong>Structure</strong> - Interaction design</li><li><strong>Skeleton</strong> - Interface design</li><li><strong>Surface</strong> - Visual design</li></ol>", duration: 15, isFree: true, isPreview: true });
+  await storage.createLesson({ moduleId: mod2_1_1.id, title: "User Research Methods", type: "TEXT", position: 1, content: "<h2>User Research</h2><p>Understanding your users is the foundation of great design.</p><h3>Qualitative Methods</h3><ul><li>User interviews</li><li>Contextual inquiry</li><li>Focus groups</li></ul><h3>Quantitative Methods</h3><ul><li>Surveys</li><li>Analytics</li><li>A/B testing</li></ul>", duration: 20 });
+  await storage.createLesson({ moduleId: mod2_2_1.id, title: "Figma Interface Tour", type: "TEXT", position: 0, content: "<h2>Getting Started with Figma</h2><p>Figma is a powerful, browser-based design tool used by professionals worldwide.</p><h3>Key Features</h3><ul><li>Vector editing tools</li><li>Component system</li><li>Auto Layout</li><li>Prototyping</li><li>Real-time collaboration</li></ul>", duration: 15 });
+  await storage.createLesson({ moduleId: mod2_2_1.id, title: "Components & Design Systems", type: "TEXT", position: 1, content: "<h2>Design Systems</h2><p>Design systems ensure consistency across your products.</p><h3>Atomic Design</h3><ol><li><strong>Atoms</strong> - Basic elements (buttons, inputs)</li><li><strong>Molecules</strong> - Simple groups</li><li><strong>Organisms</strong> - Complex sections</li><li><strong>Templates</strong> - Page layouts</li><li><strong>Pages</strong> - Final implementations</li></ol>", duration: 25 });
 
-  const ch4_1 = await storage.createChapter({ courseId: course4.id, title: "Marketing Foundations", position: 0 });
-  await storage.createLesson({ chapterId: ch4_1.id, title: "The Digital Marketing Landscape", type: "TEXT", position: 0, content: "Digital marketing encompasses all marketing efforts that use electronic devices or the internet.\n\nKey Channels:\n- Search Engine Optimization (SEO)\n- Content Marketing\n- Social Media Marketing\n- Pay-Per-Click (PPC)\n- Email Marketing\n- Affiliate Marketing\n\nThe Customer Journey:\nAwareness -> Consideration -> Decision -> Retention -> Advocacy", duration: 15, isFree: true, isPreview: true });
+  // Course 3-5: Minimal seed
+  const subj3_1 = await storage.createSubject({ courseId: course3.id, title: "Python for Data Science", position: 0 });
+  const mod3_1_1 = await storage.createModule({ subjectId: subj3_1.id, title: "Getting Started", position: 0 });
+  await storage.createLesson({ moduleId: mod3_1_1.id, title: "Setting Up Python Environment", type: "TEXT", position: 0, content: "<h2>Python Data Science Setup</h2><p>Let's set up your Python data science environment.</p><ol><li>Install Anaconda distribution</li><li>Create a virtual environment</li><li>Install key packages: pandas, numpy, matplotlib</li><li>Set up Jupyter Notebook</li></ol>", duration: 15, isFree: true, isPreview: true });
 
-  const ch5_1 = await storage.createChapter({ courseId: course5.id, title: "React Native Basics", position: 0 });
-  await storage.createLesson({ chapterId: ch5_1.id, title: "Introduction to React Native", type: "TEXT", position: 0, content: "React Native lets you build mobile apps using JavaScript and React.\n\nWhy React Native?\n- Write once, run on iOS and Android\n- Hot reloading for fast development\n- Large ecosystem and community\n- Native performance\n- Shared codebase with web React\n\nGetting Started:\nnpx react-native init MyApp\ncd MyApp\nnpx react-native run-ios\nnpx react-native run-android", duration: 15, isFree: true, isPreview: true });
+  const subj4_1 = await storage.createSubject({ courseId: course4.id, title: "Marketing Foundations", position: 0 });
+  const mod4_1_1 = await storage.createModule({ subjectId: subj4_1.id, title: "Digital Marketing Landscape", position: 0 });
+  await storage.createLesson({ moduleId: mod4_1_1.id, title: "The Digital Marketing Landscape", type: "TEXT", position: 0, content: "<h2>Digital Marketing Overview</h2><p>Digital marketing encompasses all marketing efforts that use electronic devices or the internet.</p><h3>Key Channels</h3><ul><li>Search Engine Optimization (SEO)</li><li>Content Marketing</li><li>Social Media Marketing</li><li>Email Marketing</li></ul>", duration: 15, isFree: true, isPreview: true });
+
+  const subj5_1 = await storage.createSubject({ courseId: course5.id, title: "React Native Basics", position: 0 });
+  const mod5_1_1 = await storage.createModule({ subjectId: subj5_1.id, title: "Getting Started", position: 0 });
+  await storage.createLesson({ moduleId: mod5_1_1.id, title: "Introduction to React Native", type: "TEXT", position: 0, content: "<h2>React Native</h2><p>React Native lets you build mobile apps using JavaScript and React.</p><h3>Why React Native?</h3><ul><li>Write once, run on iOS and Android</li><li>Hot reloading for fast development</li><li>Native performance</li><li>Large ecosystem</li></ul>", duration: 15, isFree: true, isPreview: true });
 
   console.log("Database seeded successfully!");
 }

@@ -61,7 +61,6 @@ export async function registerRoutes(
     next();
   }
 
-  // Auth routes
   app.post("/api/auth/register", async (req, res) => {
     try {
       const { username, password, name, email } = req.body;
@@ -134,7 +133,6 @@ export async function registerRoutes(
     }
   });
 
-  // Public routes
   app.get("/api/categories", async (_req, res) => {
     const cats = await storage.getCategories();
     res.json(cats);
@@ -166,7 +164,6 @@ export async function registerRoutes(
     res.json(course);
   });
 
-  // Enrollment
   app.get("/api/enrollments/check/:slug", requireAuth, async (req, res) => {
     const course = await storage.getCourseBySlug(req.params.slug);
     if (!course) {
@@ -203,7 +200,6 @@ export async function registerRoutes(
     }
   });
 
-  // Course player
   app.get("/api/learn/:slug", requireAuth, async (req, res) => {
     const course = await storage.getCourseBySlug(req.params.slug);
     if (!course) {
@@ -230,12 +226,15 @@ export async function registerRoutes(
       for (const e of allEnrollments) {
         const courseDetail = await storage.getCourseById(e.courseId);
         if (courseDetail) {
-          for (const ch of courseDetail.chapters || []) {
-            for (const l of ch.lessons || []) {
-              if (l.id === lessonId) {
-                targetEnrollment = e;
-                break;
+          for (const subj of courseDetail.subjects || []) {
+            for (const mod of subj.modules || []) {
+              for (const l of mod.lessons || []) {
+                if (l.id === lessonId) {
+                  targetEnrollment = e;
+                  break;
+                }
               }
+              if (targetEnrollment) break;
             }
             if (targetEnrollment) break;
           }
@@ -252,8 +251,10 @@ export async function registerRoutes(
       const courseDetail = await storage.getCourseById(targetEnrollment.courseId);
       if (courseDetail) {
         let totalLessons = 0;
-        for (const ch of courseDetail.chapters || []) {
-          totalLessons += (ch.lessons || []).length;
+        for (const subj of courseDetail.subjects || []) {
+          for (const mod of subj.modules || []) {
+            totalLessons += (mod.lessons || []).length;
+          }
         }
         const allProgress = await storage.getLessonProgressByEnrollment(targetEnrollment.id);
         const completedCount = allProgress.filter((p) => p.status === "COMPLETED").length;
@@ -272,7 +273,6 @@ export async function registerRoutes(
     }
   });
 
-  // Admin routes - all require ADMIN or INSTRUCTOR role
   app.get("/api/admin/stats", requireAdmin as any, async (req, res) => {
     const user = (req as any).currentUser;
     const stats = await storage.getAdminStats(user.id);
@@ -281,7 +281,9 @@ export async function registerRoutes(
 
   app.get("/api/admin/courses", requireAdmin as any, async (req, res) => {
     const user = (req as any).currentUser;
-    const instructorCourses = await storage.getCoursesByInstructor(user.id);
+    const instructorCourses = user.role === "ADMIN"
+      ? await storage.getCourses({ allStatuses: true })
+      : await storage.getCoursesByInstructor(user.id);
     res.json(instructorCourses);
   });
 
@@ -324,27 +326,86 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/chapters", requireAdmin as any, async (req, res) => {
+  async function verifyCourseOwnership(courseId: number, user: any): Promise<boolean> {
+    if (user.role === "ADMIN") return true;
+    const course = await storage.getCourseById(courseId);
+    return course?.instructorId === user.id;
+  }
+
+  async function verifySubjectOwnership(subjectId: number, user: any): Promise<boolean> {
+    if (user.role === "ADMIN") return true;
+    const instructorCourses = await storage.getCoursesByInstructor(user.id);
+    for (const c of instructorCourses) {
+      const subs = await storage.getSubjectsByCourse(c.id);
+      if (subs.some(s => s.id === subjectId)) return true;
+    }
+    return false;
+  }
+
+  app.post("/api/admin/subjects", requireAdmin as any, async (req, res) => {
     try {
-      const chapter = await storage.createChapter(req.body);
-      res.json(chapter);
+      const user = (req as any).currentUser;
+      if (!await verifyCourseOwnership(req.body.courseId, user)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const subject = await storage.createSubject(req.body);
+      res.json(subject);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
   });
 
-  app.patch("/api/admin/chapters/:id", requireAdmin as any, async (req, res) => {
+  app.patch("/api/admin/subjects/:id", requireAdmin as any, async (req, res) => {
     try {
-      const chapter = await storage.updateChapter(parseInt(req.params.id), req.body);
-      res.json(chapter);
+      const user = (req as any).currentUser;
+      if (!await verifySubjectOwnership(parseInt(req.params.id), user)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const subject = await storage.updateSubject(parseInt(req.params.id), req.body);
+      res.json(subject);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
   });
 
-  app.delete("/api/admin/chapters/:id", requireAdmin as any, async (req, res) => {
+  app.delete("/api/admin/subjects/:id", requireAdmin as any, async (req, res) => {
     try {
-      await storage.deleteChapter(parseInt(req.params.id));
+      const user = (req as any).currentUser;
+      if (!await verifySubjectOwnership(parseInt(req.params.id), user)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      await storage.deleteSubject(parseInt(req.params.id));
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/admin/modules", requireAdmin as any, async (req, res) => {
+    try {
+      const user = (req as any).currentUser;
+      if (!await verifySubjectOwnership(req.body.subjectId, user)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const mod = await storage.createModule(req.body);
+      res.json(mod);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.patch("/api/admin/modules/:id", requireAdmin as any, async (req, res) => {
+    try {
+      const mod = await storage.updateModule(parseInt(req.params.id), req.body);
+      res.json(mod);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.delete("/api/admin/modules/:id", requireAdmin as any, async (req, res) => {
+    try {
+      await storage.deleteModule(parseInt(req.params.id));
       res.json({ ok: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });

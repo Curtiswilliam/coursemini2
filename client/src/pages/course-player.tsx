@@ -18,6 +18,7 @@ import {
   X,
   BookOpen,
   ArrowLeft,
+  ChevronDown,
 } from "lucide-react";
 
 export default function CoursePlayer() {
@@ -36,10 +37,16 @@ export default function CoursePlayer() {
   const enrollment = courseData?.enrollment;
   const progressMap = courseData?.progressMap || {};
 
-  const allLessons = course?.chapters
+  const allLessons = course?.subjects
     ?.sort((a: any, b: any) => a.position - b.position)
-    .flatMap((ch: any) =>
-      (ch.lessons || []).sort((a: any, b: any) => a.position - b.position).map((l: any) => ({ ...l, chapterTitle: ch.title }))
+    .flatMap((subj: any) =>
+      (subj.modules || [])
+        .sort((a: any, b: any) => a.position - b.position)
+        .flatMap((mod: any) =>
+          (mod.lessons || [])
+            .sort((a: any, b: any) => a.position - b.position)
+            .map((l: any) => ({ ...l, subjectTitle: subj.title, moduleTitle: mod.title }))
+        )
     ) || [];
 
   useEffect(() => {
@@ -79,7 +86,6 @@ export default function CoursePlayer() {
         </div>
         <div className="flex-1 p-8">
           <Skeleton className="h-8 w-2/3 mb-4" />
-          <Skeleton className="aspect-video rounded-md mb-4" />
           <Skeleton className="h-32" />
         </div>
       </div>
@@ -129,40 +135,50 @@ export default function CoursePlayer() {
           </div>
           <ScrollArea className="h-[calc(100vh-12rem)]">
             <div className="p-2">
-              {course.chapters
+              {course.subjects
                 ?.sort((a: any, b: any) => a.position - b.position)
-                .map((chapter: any) => (
-                  <div key={chapter.id} className="mb-2">
-                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      {chapter.title}
+                .map((subject: any) => (
+                  <div key={subject.id} className="mb-3">
+                    <div className="px-2 py-1.5 text-xs font-semibold text-foreground uppercase tracking-wider">
+                      {subject.title}
                     </div>
-                    {chapter.lessons
+                    {subject.modules
                       ?.sort((a: any, b: any) => a.position - b.position)
-                      .map((lesson: any) => {
-                        const isCompleted = progressMap[lesson.id]?.status === "COMPLETED";
-                        const isCurrent = lesson.id === currentLessonId;
-                        return (
-                          <button
-                            key={lesson.id}
-                            onClick={() => setCurrentLessonId(lesson.id)}
-                            className={`w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors text-left ${
-                              isCurrent
-                                ? "bg-primary/10 text-primary font-medium"
-                                : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                            }`}
-                            data-testid={`button-lesson-${lesson.id}`}
-                          >
-                            {isCompleted ? (
-                              <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-                            ) : (
-                              <Circle className="h-4 w-4 shrink-0" />
-                            )}
-                            <span className="flex-1 truncate">{lesson.title}</span>
-                            {lesson.type === "VIDEO" && <Play className="h-3 w-3 shrink-0" />}
-                            {lesson.type === "TEXT" && <FileText className="h-3 w-3 shrink-0" />}
-                          </button>
-                        );
-                      })}
+                      .map((mod: any) => (
+                        <div key={mod.id} className="mb-1">
+                          <div className="px-3 py-1 text-xs font-medium text-muted-foreground flex items-center gap-1">
+                            <ChevronDown className="h-3 w-3" />
+                            {mod.title}
+                          </div>
+                          {mod.lessons
+                            ?.sort((a: any, b: any) => a.position - b.position)
+                            .map((lesson: any) => {
+                              const isCompleted = progressMap[lesson.id]?.status === "COMPLETED";
+                              const isCurrent = lesson.id === currentLessonId;
+                              return (
+                                <button
+                                  key={lesson.id}
+                                  onClick={() => setCurrentLessonId(lesson.id)}
+                                  className={`w-full flex items-center gap-2 px-4 py-2 rounded-md text-sm transition-colors text-left ${
+                                    isCurrent
+                                      ? "bg-primary/10 text-primary font-medium"
+                                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                                  }`}
+                                  data-testid={`button-lesson-${lesson.id}`}
+                                >
+                                  {isCompleted ? (
+                                    <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                                  ) : (
+                                    <Circle className="h-4 w-4 shrink-0" />
+                                  )}
+                                  <span className="flex-1 truncate">{lesson.title}</span>
+                                  {lesson.type === "VIDEO" && <Play className="h-3 w-3 shrink-0" />}
+                                  {lesson.type === "TEXT" && <FileText className="h-3 w-3 shrink-0" />}
+                                </button>
+                              );
+                            })}
+                        </div>
+                      ))}
                   </div>
                 ))}
             </div>
@@ -183,7 +199,9 @@ export default function CoursePlayer() {
           {currentLesson ? (
             <div className="max-w-4xl mx-auto p-6 md:p-8">
               <div className="mb-6">
-                <span className="text-xs text-muted-foreground">{currentLesson.chapterTitle}</span>
+                <span className="text-xs text-muted-foreground">
+                  {currentLesson.subjectTitle} › {currentLesson.moduleTitle}
+                </span>
                 <h1 className="text-2xl font-bold mt-1" data-testid="text-lesson-title">{currentLesson.title}</h1>
               </div>
 
@@ -199,9 +217,11 @@ export default function CoursePlayer() {
               )}
 
               {currentLesson.content && (
-                <div className="prose prose-sm dark:prose-invert max-w-none mb-8" data-testid="text-lesson-content">
-                  <div className="whitespace-pre-wrap">{currentLesson.content}</div>
-                </div>
+                <div
+                  className="prose prose-sm dark:prose-invert max-w-none mb-8"
+                  data-testid="text-lesson-content"
+                  dangerouslySetInnerHTML={{ __html: currentLesson.content }}
+                />
               )}
 
               {!currentLesson.content && !currentLesson.videoUrl && (
