@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/components/theme-provider";
-import { GraduationCap, Sun, Moon, LogOut, LayoutDashboard, BookOpen } from "lucide-react";
+import { NotificationBell } from "@/components/notification-bell";
+import { GraduationCap, Sun, Moon, LogOut, LayoutDashboard, BookOpen, Award } from "lucide-react";
 
 export function Navbar() {
   const { user, logout } = useAuth();
@@ -53,6 +54,8 @@ export function Navbar() {
               {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
             </Button>
 
+            <NotificationBell />
+
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -84,6 +87,12 @@ export function Navbar() {
                       </DropdownMenuItem>
                     </Link>
                   )}
+                  <Link href="/dashboard#certificates">
+                    <DropdownMenuItem>
+                      <Award className="mr-2 h-4 w-4" />
+                      My Certificates
+                    </DropdownMenuItem>
+                  </Link>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout} data-testid="button-logout">
                     <LogOut className="mr-2 h-4 w-4" />

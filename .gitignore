@@ -1,6 +1,38 @@
-node_modules
-dist
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# Uploads (user files — stored on server, not in git)
+uploads/
+
+# OS
 .DS_Store
-server/public
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Replit
+.replit
+replit.nix
+.upm/
+.cache/
+.local/
 vite.config.ts.*
+attached_assets/
+
+# Build artifacts
 *.tar.gz
+server/public/

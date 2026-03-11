@@ -4,10 +4,12 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
-import { Search, Users } from "lucide-react";
+import { Search, Users, Award, ChevronRight } from "lucide-react";
+import { useLocation } from "wouter";
 
 export default function AdminStudents() {
   const [search, setSearch] = useState("");
+  const [, navigate] = useLocation();
 
   const { data: students, isLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/students"],
@@ -56,8 +58,9 @@ export default function AdminStudents() {
                 {filtered.map((student: any) => (
                   <div
                     key={student.id}
-                    className="flex items-center gap-4 p-4"
+                    className="flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50 transition-colors"
                     data-testid={`row-student-${student.id}`}
+                    onClick={() => navigate(`/admin/students/${student.id}`)}
                   >
                     <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
                       {student.name?.charAt(0)?.toUpperCase() || "?"}
@@ -66,9 +69,23 @@ export default function AdminStudents() {
                       <p className="font-medium text-sm" data-testid={`text-student-name-${student.id}`}>{student.name}</p>
                       <p className="text-xs text-muted-foreground">{student.email}</p>
                     </div>
-                    <Badge variant="outline" className="no-default-active-elevate">
-                      {student.enrollmentCount || 0} courses
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="no-default-active-elevate">
+                        {student.enrollmentCount || 0} courses
+                      </Badge>
+                      {student.certificates?.length > 0 && (
+                        <Badge variant="secondary" className="no-default-active-elevate flex items-center gap-1">
+                          <Award className="h-3 w-3" />
+                          {student.certificates.length}
+                        </Badge>
+                      )}
+                      {student.groupCount > 0 && (
+                        <Badge variant="outline" className="no-default-active-elevate text-xs">
+                          {student.groupCount} group{student.groupCount !== 1 ? "s" : ""}
+                        </Badge>
+                      )}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground ml-1" />
+                    </div>
                   </div>
                 ))}
               </div>

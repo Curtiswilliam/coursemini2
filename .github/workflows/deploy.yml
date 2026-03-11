@@ -1,0 +1,63 @@
+name: Deploy to Linode
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # allow manual trigger from GitHub UI
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LINODE_HOST }}
+          username: ${{ secrets.LINODE_USER }}
+          key: ${{ secrets.LINODE_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            cd /var/www/coursemini
+            git pull origin main
+            npm ci --omit=dev
+            # Install build tools needed on server
+            npm install --save-dev tsx esbuild vite @vitejs/plugin-react tailwindcss autoprefixer postcss drizzle-kit 2>/dev/null || true
+            npm run build
+            npm run db:push
+            if pm2 list | grep -q "coursemini"; then
+              pm2 reload ecosystem.config.cjs --env production
+            else
+              pm2 start ecosystem.config.cjs --env production
+            fi
+            pm2 save
+            echo "Deploy complete!"
+
+      - name: Notify success
+        if: success()
+        run: echo "✅ Deployed successfully to production"
+
+      - name: Notify failure
+        if: failure()
+        run: echo "❌ Deployment failed — check logs above"

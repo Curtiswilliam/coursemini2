@@ -1,9 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   BookOpen,
   Users,
@@ -13,10 +16,22 @@ import {
   BarChart3,
   Shield,
   PieChart,
+  Copy,
+  Pencil,
+  MoreHorizontal,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const [duplicating, setDuplicating] = useState<number | null>(null);
 
   const { data: stats, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/stats"],
@@ -24,6 +39,20 @@ export default function AdminDashboard() {
 
   const { data: recentCourses } = useQuery<any[]>({
     queryKey: ["/api/admin/courses"],
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: async (courseId: number) => {
+      const res = await apiRequest("POST", `/api/admin/courses/${courseId}/duplicate`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/courses"] });
+      toast({ title: "Course duplicated", description: `"${data.title}" created as a draft.` });
+      navigate(`/admin/courses/${data.id}/edit`);
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSettled: () => setDuplicating(null),
   });
 
   if (isLoading) {
@@ -171,16 +200,26 @@ export default function AdminDashboard() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold">Your Courses</h2>
+            <Link href="/admin/courses/new">
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                New Course
+              </Button>
+            </Link>
           </div>
           {recentCourses && recentCourses.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {recentCourses.slice(0, 6).map((course: any) => (
-                <Card key={course.id} className="hover-elevate cursor-pointer" data-testid={`card-admin-course-${course.id}`}>
-                  <Link href={`/admin/courses/${course.id}/edit`}>
-                    <div className="flex items-start gap-4 p-4">
+              {recentCourses.map((course: any) => (
+                <Card key={course.id} className="group" data-testid={`card-admin-course-${course.id}`}>
+                  <div className="flex items-start gap-4 p-4">
+                    <Link href={`/admin/courses/${course.id}/edit`} className="flex items-start gap-4 flex-1 min-w-0">
                       <div className="h-16 w-24 rounded-md overflow-hidden shrink-0 bg-muted">
-                        {course.thumbnail && (
+                        {course.thumbnail ? (
                           <img src={course.thumbnail} alt={course.title} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center">
+                            <BookOpen className="h-6 w-6 text-muted-foreground/40" />
+                          </div>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -191,12 +230,41 @@ export default function AdminDashboard() {
                           ) : (
                             <span className="text-amber-500">Draft</span>
                           )}
-                          {" "}·{" "}
+                          {" · "}
                           {course.enrollmentCount || 0} students
                         </p>
                       </div>
-                    </div>
-                  </Link>
+                    </Link>
+
+                    {/* Actions */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => navigate(`/admin/courses/${course.id}/edit`)}>
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={duplicating === course.id}
+                          onClick={() => {
+                            setDuplicating(course.id);
+                            duplicateMutation.mutate(course.id);
+                          }}
+                        >
+                          <Copy className="h-4 w-4 mr-2" />
+                          {duplicating === course.id ? "Duplicating…" : "Duplicate"}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </Card>
               ))}
             </div>

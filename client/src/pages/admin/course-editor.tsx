@@ -15,7 +15,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { RichTextEditor } from "@/components/rich-text-editor";
+import { BlockBuilder } from "@/components/block-builder";
 import {
   Plus,
   Trash2,
@@ -30,6 +30,7 @@ import {
   BookOpen,
   Layers,
   Box,
+  X,
 } from "lucide-react";
 
 const courseSchema = z.object({
@@ -378,9 +379,12 @@ export default function CourseEditor() {
                       name="thumbnail"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Thumbnail URL</FormLabel>
+                          <FormLabel>
+                            Thumbnail URL{" "}
+                            <span className="text-muted-foreground font-normal">(optional)</span>
+                          </FormLabel>
                           <FormControl>
-                            <Input placeholder="/images/course-thumbnail.png" {...field} value={field.value || ""} data-testid="input-thumbnail" />
+                            <Input placeholder="https://example.com/image.png" {...field} value={field.value || ""} data-testid="input-thumbnail" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -618,6 +622,8 @@ export default function CourseEditor() {
                                                       <div className="flex items-center gap-2 pl-4">
                                                         {lesson.type === "VIDEO" ? (
                                                           <Play className="h-3 w-3 text-muted-foreground shrink-0" />
+                                                        ) : lesson.type === "QUIZ" ? (
+                                                          <BookOpen className="h-3 w-3 text-primary shrink-0" />
                                                         ) : (
                                                           <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
                                                         )}
@@ -787,11 +793,67 @@ function LessonEditor({
   onCancel: () => void;
   isSaving: boolean;
 }) {
+  const { toast } = useToast();
   const [title, setTitle] = useState(lesson.title);
   const [type, setType] = useState(lesson.type || "TEXT");
-  const [content, setContent] = useState(lesson.content || "");
+  const [_content] = useState(lesson.content || ""); // Legacy: blocks handled by BlockBuilder
   const [videoUrl, setVideoUrl] = useState(lesson.videoUrl || "");
   const [duration, setDuration] = useState(lesson.duration?.toString() || "");
+  const [dripDays, setDripDays] = useState(lesson.dripDays?.toString() || "");
+
+  // Quiz state
+  const [quizQuestions, setQuizQuestions] = useState<Array<{
+    question: string;
+    type: string;
+    position: number;
+    options: Array<{ text: string; isCorrect: boolean }>;
+  }>>(lesson.quiz?.questions?.map((q: any) => ({
+    question: q.question,
+    type: q.type,
+    position: q.position,
+    options: q.options?.map((o: any) => ({ text: o.text, isCorrect: o.isCorrect })) || [],
+  })) || []);
+  const [savingQuiz, setSavingQuiz] = useState(false);
+
+  const addQuestion = () => {
+    setQuizQuestions([...quizQuestions, {
+      question: "",
+      type: "MULTIPLE_CHOICE",
+      position: quizQuestions.length,
+      options: [{ text: "", isCorrect: true }, { text: "", isCorrect: false }],
+    }]);
+  };
+
+  const updateQuestion = (qi: number, field: string, value: any) => {
+    setQuizQuestions(quizQuestions.map((q, i) => i === qi ? { ...q, [field]: value } : q));
+  };
+
+  const addOption = (qi: number) => {
+    setQuizQuestions(quizQuestions.map((q, i) => i === qi ? { ...q, options: [...q.options, { text: "", isCorrect: false }] } : q));
+  };
+
+  const updateOption = (qi: number, oi: number, field: string, value: any) => {
+    setQuizQuestions(quizQuestions.map((q, i) => i === qi ? {
+      ...q,
+      options: q.options.map((o, j) => j === oi ? { ...o, [field]: value } : (field === "isCorrect" && value ? { ...o, isCorrect: false } : o))
+    } : q));
+  };
+
+  const removeQuestion = (qi: number) => {
+    setQuizQuestions(quizQuestions.filter((_, i) => i !== qi).map((q, i) => ({ ...q, position: i })));
+  };
+
+  const saveQuiz = async () => {
+    setSavingQuiz(true);
+    try {
+      await apiRequest("POST", `/api/admin/lessons/${lesson.id}/quiz`, { questions: quizQuestions });
+      toast({ title: "Quiz saved!" });
+    } catch (e: any) {
+      toast({ title: "Error saving quiz", description: e.message, variant: "destructive" });
+    } finally {
+      setSavingQuiz(false);
+    }
+  };
 
   return (
     <div className="border rounded-md p-4 space-y-3 bg-muted/20" data-testid={`lesson-editor-${lesson.id}`}>
@@ -810,6 +872,7 @@ function LessonEditor({
           <SelectContent>
             <SelectItem value="TEXT">Text</SelectItem>
             <SelectItem value="VIDEO">Video</SelectItem>
+            <SelectItem value="QUIZ">Quiz</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -823,24 +886,114 @@ function LessonEditor({
         />
       )}
 
-      <div>
-        <label className="text-sm font-medium mb-2 block">Lesson Content</label>
-        <RichTextEditor
-          content={content}
-          onChange={setContent}
-          placeholder="Write your lesson content here..."
-        />
+      {type !== "QUIZ" && (
+        <div>
+          <label className="text-sm font-medium mb-2 block">Lesson Content</label>
+          <BlockBuilder lessonId={lesson.id} />
+        </div>
+      )}
+
+      {/* Drip Days */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted-foreground whitespace-nowrap">Drip Days (optional):</label>
+          <Input
+            value={dripDays}
+            onChange={(e) => setDripDays(e.target.value)}
+            placeholder="e.g. 7"
+            type="number"
+            min="0"
+            className="w-24"
+            data-testid={`input-lesson-drip-${lesson.id}`}
+          />
+          <span className="text-xs text-muted-foreground">days after enrollment</span>
+        </div>
+        {type !== "QUIZ" && (
+          <Input
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            placeholder="Duration (min)"
+            type="number"
+            className="w-32"
+            data-testid={`input-lesson-duration-${lesson.id}`}
+          />
+        )}
       </div>
 
+      {/* Quiz Builder */}
+      {type === "QUIZ" && (
+        <div className="space-y-4 border rounded-md p-3 bg-background">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold">Quiz Builder</span>
+            <Button size="sm" variant="outline" onClick={addQuestion}>
+              <Plus className="h-3 w-3 mr-1" />
+              Add Question
+            </Button>
+          </div>
+          {quizQuestions.map((q, qi) => (
+            <div key={qi} className="border rounded-md p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Input
+                  value={q.question}
+                  onChange={(e) => updateQuestion(qi, "question", e.target.value)}
+                  placeholder={`Question ${qi + 1}`}
+                  className="flex-1 text-sm"
+                />
+                <Select value={q.type} onValueChange={(v) => updateQuestion(qi, "type", v)}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MULTIPLE_CHOICE">Multiple Choice</SelectItem>
+                    <SelectItem value="TRUE_FALSE">True/False</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeQuestion(qi)}>
+                  <Trash2 className="h-3 w-3 text-destructive" />
+                </Button>
+              </div>
+              <div className="space-y-1 pl-2">
+                {q.options.map((opt, oi) => (
+                  <div key={oi} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name={`q-${qi}-correct`}
+                      checked={opt.isCorrect}
+                      onChange={() => updateOption(qi, oi, "isCorrect", true)}
+                      className="shrink-0"
+                    />
+                    <Input
+                      value={opt.text}
+                      onChange={(e) => updateOption(qi, oi, "text", e.target.value)}
+                      placeholder={`Option ${oi + 1}`}
+                      className="flex-1 h-7 text-xs"
+                    />
+                    {q.options.length > 2 && (
+                      <button onClick={() => setQuizQuestions(quizQuestions.map((qq, qi2) => qi2 === qi ? { ...qq, options: qq.options.filter((_, oi2) => oi2 !== oi) } : qq))}>
+                        <X className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {q.type === "MULTIPLE_CHOICE" && q.options.length < 6 && (
+                  <Button variant="ghost" size="sm" className="text-xs h-6" onClick={() => addOption(qi)}>
+                    <Plus className="h-2.5 w-2.5 mr-1" />
+                    Add Option
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
+          {quizQuestions.length > 0 && (
+            <Button size="sm" onClick={saveQuiz} disabled={savingQuiz} className="w-full">
+              {savingQuiz && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Save Quiz
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center gap-3">
-        <Input
-          value={duration}
-          onChange={(e) => setDuration(e.target.value)}
-          placeholder="Duration (minutes)"
-          type="number"
-          className="w-40"
-          data-testid={`input-lesson-duration-${lesson.id}`}
-        />
         <div className="flex-1" />
         <Button variant="ghost" size="sm" onClick={onCancel} data-testid={`button-cancel-lesson-${lesson.id}`}>
           Cancel
@@ -851,9 +1004,9 @@ function LessonEditor({
             onSave({
               title,
               type,
-              content,
               videoUrl: type === "VIDEO" ? videoUrl : null,
               duration: duration ? parseInt(duration) : null,
+              dripDays: dripDays ? parseInt(dripDays) : null,
             })
           }
           disabled={isSaving}
@@ -866,3 +1019,4 @@ function LessonEditor({
     </div>
   );
 }
+

@@ -1,8 +1,10 @@
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -23,6 +25,8 @@ import {
   Loader2,
   BarChart3,
   Globe,
+  Tag,
+  X,
 } from "lucide-react";
 
 export default function CourseDetailPage() {
@@ -30,6 +34,9 @@ export default function CourseDetailPage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
+  const [couponError, setCouponError] = useState("");
 
   const { data: course, isLoading } = useQuery<any>({
     queryKey: ["/api/courses", params?.slug],
@@ -48,9 +55,51 @@ export default function CourseDetailPage() {
     enabled: !!user && !!params?.slug,
   });
 
+  // Track course page views (only for logged-in users)
+  useEffect(() => {
+    if (!course || !user) return;
+    fetch("/api/track", {
+      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+      body: JSON.stringify({ eventType: "course_page_view", courseId: course.id, metadata: { slug: course.slug, enrolled: !!enrollment } }),
+    }).catch(() => {});
+  }, [course?.id]);
+
+  // Track abandoned checkout — fires when logged-in user leaves without enrolling
+  useEffect(() => {
+    if (!course || !user || enrollment) return;
+    const startTime = Date.now();
+    return () => {
+      // Only fire if they spent at least 10 seconds on the page
+      if (Date.now() - startTime < 10000) return;
+      navigator.sendBeacon("/api/track", JSON.stringify({
+        eventType: "checkout_abandon",
+        courseId: course.id,
+        metadata: { courseTitle: course.title, courseUrl: `/courses/${course.slug}` },
+      }));
+    };
+  }, [course?.id, !!enrollment, !!user]);
+
+  const validateCouponMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const res = await apiRequest("POST", "/api/coupons/validate", { code, courseId: course?.id });
+      return res;
+    },
+    onSuccess: (data: any) => {
+      setAppliedCoupon(data.coupon);
+      setCouponError("");
+      toast({ title: "Coupon applied!", description: `${data.coupon.type === "PERCENTAGE" ? `${data.coupon.value}%` : `$${data.coupon.value}`} discount applied` });
+    },
+    onError: (e: any) => {
+      setCouponError(e.message || "Invalid coupon");
+      setAppliedCoupon(null);
+    },
+  });
+
   const enrollMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", `/api/courses/${course.id}/enroll`);
+      await apiRequest("POST", `/api/courses/${course.id}/enroll`, {
+        couponCode: appliedCoupon?.code,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/enrollments"] });
@@ -58,7 +107,13 @@ export default function CourseDetailPage() {
       navigate(`/learn/${course.slug}`);
     },
     onError: (e: any) => {
-      toast({ title: "Enrollment failed", description: e.message, variant: "destructive" });
+      const msg = String(e.message || "");
+      if (msg.includes("verify your email") || msg.includes("verify your phone")) {
+        toast({ title: "Account verification required", description: "Please complete your account setup first." });
+        navigate(`/auth?tab=register&returnTo=/courses/${course?.slug}`);
+      } else {
+        toast({ title: "Enrollment failed", description: e.message, variant: "destructive" });
+      }
     },
   });
 
@@ -111,6 +166,13 @@ export default function CourseDetailPage() {
     acc + (subj.modules?.reduce((a: number, mod: any) =>
       a + (mod.lessons?.reduce((x: number, l: any) => x + (l.duration || 0), 0) || 0), 0) || 0), 0) || 0;
 
+  const basePrice = course.salePrice || course.price || 0;
+  const discountedPrice = appliedCoupon
+    ? appliedCoupon.type === "PERCENTAGE"
+      ? basePrice * (1 - appliedCoupon.value / 100)
+      : Math.max(0, basePrice - appliedCoupon.value)
+    : basePrice;
+
   return (
     <div className="min-h-screen">
       <div className="bg-card border-b">
@@ -122,7 +184,7 @@ export default function CourseDetailPage() {
             {course.level && (
               <Badge variant="outline" data-testid="badge-level">
                 <BarChart3 className="h-3 w-3 mr-1" />
-                {course.level.charAt(0) + course.level.slice(1).toLowerCase()}
+                {typeof course.level === "string" ? course.level.charAt(0) + course.level.slice(1).toLowerCase() : course.level}
               </Badge>
             )}
           </div>
@@ -229,6 +291,9 @@ export default function CourseDetailPage() {
                                         >
                                           {lessonTypeIcon(lesson.type)}
                                           <span className="flex-1">{lesson.title}</span>
+                                          {lesson.dripDays != null && (
+                                            <span className="text-xs text-muted-foreground">Day {lesson.dripDays}</span>
+                                          )}
                                           {lesson.duration && (
                                             <span className="text-xs text-muted-foreground">{lesson.duration}m</span>
                                           )}
@@ -285,13 +350,18 @@ export default function CourseDetailPage() {
                     {course.isFree ? (
                       <span className="text-3xl font-bold" data-testid="text-price">Free</span>
                     ) : (
-                      <div className="flex items-center justify-center gap-2">
-                        {course.salePrice && (
-                          <span className="text-lg text-muted-foreground line-through">${course.price?.toFixed(2)}</span>
+                      <div className="flex items-center justify-center gap-2 flex-wrap">
+                        {(course.salePrice || appliedCoupon) && (
+                          <span className="text-lg text-muted-foreground line-through">${basePrice.toFixed(2)}</span>
                         )}
                         <span className="text-3xl font-bold" data-testid="text-price">
-                          ${(course.salePrice || course.price)?.toFixed(2)}
+                          ${discountedPrice.toFixed(2)}
                         </span>
+                        {appliedCoupon && (
+                          <Badge variant="default" className="text-xs">
+                            {appliedCoupon.type === "PERCENTAGE" ? `-${appliedCoupon.value}%` : `-$${appliedCoupon.value}`}
+                          </Badge>
+                        )}
                       </div>
                     )}
                   </div>
@@ -315,22 +385,59 @@ export default function CourseDetailPage() {
                       </Button>
                     </div>
                   ) : (
-                    <Button
-                      className="w-full"
-                      size="lg"
-                      onClick={() => {
-                        if (!user) {
-                          navigate("/auth");
-                          return;
-                        }
-                        enrollMutation.mutate();
-                      }}
-                      disabled={enrollMutation.isPending}
-                      data-testid="button-enroll"
-                    >
-                      {enrollMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      {course.isFree ? "Enroll for Free" : `Enroll - $${(course.salePrice || course.price)?.toFixed(2)}`}
-                    </Button>
+                    <div className="space-y-3">
+                      {/* Coupon section for paid courses */}
+                      {!course.isFree && (
+                        <div className="space-y-2">
+                          {appliedCoupon ? (
+                            <div className="flex items-center gap-2 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-sm">
+                              <Tag className="h-4 w-4 text-emerald-500 shrink-0" />
+                              <span className="flex-1 text-emerald-700 dark:text-emerald-400 font-medium">{appliedCoupon.code}</span>
+                              <button onClick={() => { setAppliedCoupon(null); setCouponCode(""); setCouponError(""); }}>
+                                <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Coupon code"
+                                value={couponCode}
+                                onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponError(""); }}
+                                className="text-sm uppercase"
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!couponCode || validateCouponMutation.isPending}
+                                onClick={() => validateCouponMutation.mutate(couponCode)}
+                              >
+                                Apply
+                              </Button>
+                            </div>
+                          )}
+                          {couponError && <p className="text-xs text-destructive">{couponError}</p>}
+                        </div>
+                      )}
+
+                      <Button
+                        className="w-full"
+                        size="lg"
+                        onClick={() => {
+                          if (!user) {
+                            navigate(`/auth?tab=register&returnTo=/courses/${course.slug}`);
+                            return;
+                          }
+                          enrollMutation.mutate();
+                        }}
+                        disabled={enrollMutation.isPending}
+                        data-testid="button-enroll"
+                      >
+                        {enrollMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {course.isFree
+                          ? "Enroll for Free"
+                          : `Enroll - $${discountedPrice.toFixed(2)}`}
+                      </Button>
+                    </div>
                   )}
 
                   <div className="space-y-3 text-sm">

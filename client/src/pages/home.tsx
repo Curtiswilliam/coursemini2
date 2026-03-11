@@ -38,6 +38,13 @@ export default function Home() {
     queryKey: ["/api/stats"],
   });
 
+  const { data: siteSettings } = useQuery<Record<string, string>>({
+    queryKey: ["/api/site-settings"],
+  });
+
+  const heroTitle = siteSettings?.heroTitle || "Learn Without\nLimits";
+  const heroSubtitle = siteSettings?.heroSubtitle || "Master new skills with world-class instructors. Access thousands of courses in technology, design, business, and more.";
+
   return (
     <div className="min-h-screen">
       <section className="relative overflow-hidden">
@@ -48,12 +55,15 @@ export default function Home() {
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-24 md:py-36">
           <div className="max-w-2xl">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-tight" data-testid="text-hero-title">
-              Learn Without
-              <span className="block bg-gradient-to-r from-orange-400 via-rose-400 to-pink-400 bg-clip-text text-transparent">Limits</span>
+              {heroTitle.split("\n")[0]}
+              {heroTitle.includes("\n") && (
+                <span className="block bg-gradient-to-r from-orange-400 via-rose-400 to-pink-400 bg-clip-text text-transparent">
+                  {heroTitle.split("\n")[1]}
+                </span>
+              )}
             </h1>
             <p className="mt-6 text-lg text-gray-300 max-w-lg leading-relaxed">
-              Master new skills with world-class instructors. Access thousands of courses
-              in technology, design, business, and more.
+              {heroSubtitle}
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link href="/courses">
