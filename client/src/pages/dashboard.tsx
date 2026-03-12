@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
-import { BookOpen, ArrowRight, GraduationCap, Trophy, Award, ExternalLink, Lock, Star } from "lucide-react";
+import { BookOpen, ArrowRight, GraduationCap, Trophy, Award, ExternalLink, Lock, Star, GitBranch } from "lucide-react";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -30,6 +30,11 @@ export default function Dashboard() {
 
   const { data: allCourses } = useQuery<any[]>({
     queryKey: ["/api/courses"],
+    enabled: !!user,
+  });
+
+  const { data: myPathways } = useQuery<any[]>({
+    queryKey: ["/api/my/pathways"],
     enabled: !!user,
   });
 
@@ -148,6 +153,45 @@ export default function Dashboard() {
                         <ArrowRight className="ml-1 h-3 w-3" />
                       </Button>
                     </Link>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Learning Pathways */}
+        {myPathways && myPathways.length > 0 && (
+          <div>
+            <h2 className="text-xl font-bold mb-4">Your Learning Pathways</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {myPathways.map((pathway: any) => (
+                <Card key={pathway.id} className="border-primary/20 bg-primary/5">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                        <GitBranch className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate">{pathway.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {pathway.currentStep} of {pathway.totalSteps} courses complete
+                        </p>
+                      </div>
+                    </div>
+                    <Progress value={(pathway.currentStep / pathway.totalSteps) * 100} className="h-1.5" />
+                    {pathway.completed ? (
+                      <p className="text-xs text-emerald-500 flex items-center gap-1">
+                        <Trophy className="h-3 w-3" /> Pathway complete!
+                      </p>
+                    ) : pathway.nextCourse ? (
+                      <Link href={`/courses/${pathway.nextCourse.slug}`}>
+                        <Button size="sm" className="w-full">
+                          Next: {pathway.nextCourse.title}
+                          <ArrowRight className="ml-1 h-3 w-3" />
+                        </Button>
+                      </Link>
+                    ) : null}
                   </CardContent>
                 </Card>
               ))}

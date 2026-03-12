@@ -42,6 +42,8 @@ const TRIGGER_OPTIONS = [
   { value: "certificate_issued", label: "Certificate Issued", description: "Fires when a certificate is issued after course completion" },
   { value: "badge_earned", label: "Badge Earned", description: "Fires when a student earns a badge" },
   { value: "checkout_abandon", label: "Abandoned Checkout", description: "Fires when a logged-in user views a course page but leaves without enrolling" },
+  { value: "pathway_next_course", label: "Pathway: Next Course", description: "Fires when a student completes a course and unlocks the next one in a pathway" },
+  { value: "pathway_complete", label: "Pathway: Fully Completed", description: "Fires when a student finishes every course in a pathway" },
   { value: "password_reset", label: "Password Reset", description: "Fires when a password reset is requested" },
 ];
 

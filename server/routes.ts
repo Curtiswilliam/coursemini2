@@ -638,6 +638,54 @@ export async function registerRoutes(
             }).catch(() => {});
           }
           storage.checkAndAwardBadges(req.session.userId!).catch(() => {});
+
+          // ── Pathway automation ──────────────────────────────────────────
+          (async () => {
+            try {
+              const pathwayEntries = await storage.getPathwaysContainingCourse(targetCourse.id);
+              for (const entry of pathwayEntries) {
+                // Get all steps in this pathway ordered by position
+                const steps = await storage.getPathwaySteps(entry.pathwayId);
+                const currentIdx = steps.findIndex((s: any) => s.courseId === targetCourse.id);
+                if (currentIdx === -1) continue;
+
+                // Update user's pathway progress
+                await storage.upsertUserPathwayProgress(req.session.userId!, entry.pathwayId, currentIdx + 1);
+
+                const nextStep = steps[currentIdx + 1];
+                if (nextStep) {
+                  // Notify in-app about the next course
+                  const nextCourse = await storage.getCourseById(nextStep.courseId);
+                  if (nextCourse) {
+                    await notify(
+                      req.session.userId!,
+                      "Next Course Ready!",
+                      `You've unlocked the next step in "${entry.pathwayName}": "${nextCourse.title}". Keep going!`,
+                      "SUCCESS"
+                    );
+                    // Fire email automation
+                    storage.fireEmailAutomation("pathway_next_course", req.session.userId!, {
+                      pathwayName: entry.pathwayName,
+                      completedCourse: targetCourse.title,
+                      nextCourseTitle: nextCourse.title,
+                      nextCourseUrl: `/courses/${nextCourse.slug}`,
+                    }).catch(() => {});
+                  }
+                } else {
+                  // Completed the full pathway
+                  await notify(
+                    req.session.userId!,
+                    "Pathway Complete!",
+                    `Amazing! You've completed the entire "${entry.pathwayName}" pathway!`,
+                    "SUCCESS"
+                  );
+                  storage.fireEmailAutomation("pathway_complete", req.session.userId!, {
+                    pathwayName: entry.pathwayName,
+                  }).catch(() => {});
+                }
+              }
+            } catch {}
+          })();
         }
       }
 
@@ -781,6 +829,42 @@ export async function registerRoutes(
     try {
       const badges = await storage.getUserBadges(req.session.userId!);
       res.json(badges);
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  // Student's pathway progress
+  app.get("/api/my/pathways", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      // Get all active pathways
+      const allPathways = await storage.getPathways();
+      const activePathways = allPathways.filter((p: any) => p.isActive);
+      const result = await Promise.all(
+        activePathways.map(async (pathway: any) => {
+          const steps = await storage.getPathwaySteps(pathway.id);
+          const progress = await storage.getUserPathwayProgress(userId, pathway.id);
+          const currentStep = progress?.currentStep ?? 0;
+          const nextStep = steps[currentStep];
+          const nextCourse = nextStep ? await storage.getCourseById(nextStep.courseId) : null;
+          // Only include pathways the user has started or where they're enrolled in any course
+          const enrollments = await storage.getEnrollmentsByUser(userId);
+          const enrolledCourseIds = new Set(enrollments.map((e: any) => e.courseId));
+          const hasStarted = steps.some((s: any) => enrolledCourseIds.has(s.courseId));
+          if (!hasStarted) return null;
+          return {
+            id: pathway.id,
+            name: pathway.name,
+            description: pathway.description,
+            totalSteps: steps.length,
+            currentStep,
+            completed: currentStep >= steps.length,
+            nextCourse: nextCourse ? { id: nextCourse.id, title: nextCourse.title, slug: nextCourse.slug, thumbnail: nextCourse.thumbnail } : null,
+          };
+        })
+      );
+      res.json(result.filter(Boolean));
     } catch (e: any) {
       res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
     }
