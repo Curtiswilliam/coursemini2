@@ -627,19 +627,17 @@ export async function registerRoutes(
           if (!existingCert) {
             const cert = await storage.createCertificate(req.session.userId!, targetEnrollment.courseId);
             await notify(req.session.userId!, "Certificate Issued!", `Congratulations! You've completed "${targetCourse.title}" and earned a certificate.`, "SUCCESS");
+            // Fire certificate email automation using the cert returned by createCertificate
+            if (cert) storage.fireEmailAutomation("certificate_issued", req.session.userId!, { courseTitle: targetCourse.title, certificateUrl: `/certificates/${cert.certificateCode}` }).catch(() => {});
           }
           await notify(req.session.userId!, "Course Completed!", `You've completed "${targetCourse.title}". Great work!`, "SUCCESS");
           fireCampaignTrigger("COURSE_COMPLETED", req.session.userId!, targetEnrollment.courseId).catch(() => {});
           storage.fireEmailAutomation("course_complete", req.session.userId!, { courseTitle: targetCourse.title }).catch(() => {});
-          if (!existingCert) {
-            // cert was just created above — fire certificate_issued automation
-            storage.getCertificateByUserAndCourse(req.session.userId!, targetEnrollment.courseId).then(c => {
-              if (c) storage.fireEmailAutomation("certificate_issued", req.session.userId!, { courseTitle: targetCourse.title, certificateUrl: `/certificates/${c.certificateCode}` }).catch(() => {});
-            }).catch(() => {});
-          }
           storage.checkAndAwardBadges(req.session.userId!).catch(() => {});
 
           // ── Pathway automation ──────────────────────────────────────────
+          // Capture userId synchronously before the async IIFE runs post-response
+          const pathwayUserId = req.session.userId!;
           (async () => {
             try {
               const pathwayEntries = await storage.getPathwaysContainingCourse(targetCourse.id);
@@ -650,7 +648,7 @@ export async function registerRoutes(
                 if (currentIdx === -1) continue;
 
                 // Update user's pathway progress
-                await storage.upsertUserPathwayProgress(req.session.userId!, entry.pathwayId, currentIdx + 1);
+                await storage.upsertUserPathwayProgress(pathwayUserId, entry.pathwayId, currentIdx + 1);
 
                 const nextStep = steps[currentIdx + 1];
                 if (nextStep) {
@@ -658,13 +656,13 @@ export async function registerRoutes(
                   const nextCourse = await storage.getCourseById(nextStep.courseId);
                   if (nextCourse) {
                     await notify(
-                      req.session.userId!,
+                      pathwayUserId,
                       "Next Course Ready!",
                       `You've unlocked the next step in "${entry.pathwayName}": "${nextCourse.title}". Keep going!`,
                       "SUCCESS"
                     );
                     // Fire email automation
-                    storage.fireEmailAutomation("pathway_next_course", req.session.userId!, {
+                    storage.fireEmailAutomation("pathway_next_course", pathwayUserId, {
                       pathwayName: entry.pathwayName,
                       completedCourse: targetCourse.title,
                       nextCourseTitle: nextCourse.title,
@@ -674,17 +672,19 @@ export async function registerRoutes(
                 } else {
                   // Completed the full pathway
                   await notify(
-                    req.session.userId!,
+                    pathwayUserId,
                     "Pathway Complete!",
                     `Amazing! You've completed the entire "${entry.pathwayName}" pathway!`,
                     "SUCCESS"
                   );
-                  storage.fireEmailAutomation("pathway_complete", req.session.userId!, {
+                  storage.fireEmailAutomation("pathway_complete", pathwayUserId, {
                     pathwayName: entry.pathwayName,
                   }).catch(() => {});
                 }
               }
-            } catch {}
+            } catch (err) {
+              console.error("[pathway automation] error:", err);
+            }
           })();
         }
       }
@@ -841,18 +841,19 @@ export async function registerRoutes(
       // Get all active pathways
       const allPathways = await storage.getPathways();
       const activePathways = allPathways.filter((p: any) => p.isActive);
+      // Fetch enrollments once outside the loop to avoid N+1 queries
+      const enrollments = await storage.getEnrollmentsByUser(userId);
+      const enrolledCourseIds = new Set(enrollments.map((e: any) => e.courseId));
       const result = await Promise.all(
         activePathways.map(async (pathway: any) => {
           const steps = await storage.getPathwaySteps(pathway.id);
+          // Only include pathways the user has started or where they're enrolled in any course
+          const hasStarted = steps.some((s: any) => enrolledCourseIds.has(s.courseId));
+          if (!hasStarted) return null;
           const progress = await storage.getUserPathwayProgress(userId, pathway.id);
           const currentStep = progress?.currentStep ?? 0;
           const nextStep = steps[currentStep];
           const nextCourse = nextStep ? await storage.getCourseById(nextStep.courseId) : null;
-          // Only include pathways the user has started or where they're enrolled in any course
-          const enrollments = await storage.getEnrollmentsByUser(userId);
-          const enrolledCourseIds = new Set(enrollments.map((e: any) => e.courseId));
-          const hasStarted = steps.some((s: any) => enrolledCourseIds.has(s.courseId));
-          if (!hasStarted) return null;
           return {
             id: pathway.id,
             name: pathway.name,

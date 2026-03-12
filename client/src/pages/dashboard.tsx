@@ -179,7 +179,7 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    <Progress value={(pathway.currentStep / pathway.totalSteps) * 100} className="h-1.5" />
+                    <Progress value={pathway.totalSteps > 0 ? (pathway.currentStep / pathway.totalSteps) * 100 : 0} className="h-1.5" />
                     {pathway.completed ? (
                       <p className="text-xs text-emerald-500 flex items-center gap-1">
                         <Trophy className="h-3 w-3" /> Pathway complete!
