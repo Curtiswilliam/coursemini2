@@ -252,7 +252,7 @@ function RegisterWizard() {
     try {
       await apiRequest("POST", "/api/auth/complete-profile", values);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "Account created!", description: "Welcome to CourseMini." });
+      toast({ title: "Account created!", description: "Welcome to CourseMini by EQC Institute." });
       const params = new URLSearchParams(window.location.search);
       navigate(params.get("returnTo") || "/dashboard");
     } catch (e: any) {
@@ -492,7 +492,10 @@ export default function AuthPage() {
             <div className="flex h-12 w-12 items-center justify-center rounded-md bg-white/20 backdrop-blur-sm">
               <GraduationCap className="h-7 w-7" />
             </div>
-            <span className="text-2xl font-bold">CourseMini</span>
+            <div>
+              <span className="text-2xl font-bold">CourseMini</span>
+              <p className="text-sm text-primary-foreground/70">by EQC Institute</p>
+            </div>
           </div>
           <h2 className="text-3xl font-bold mb-4 leading-tight">Start your learning journey today</h2>
           <p className="text-primary-foreground/80 leading-relaxed">

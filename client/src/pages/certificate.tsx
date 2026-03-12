@@ -80,9 +80,10 @@ export default function CertificatePage() {
             <div className="h-12 w-12 rounded-md bg-gradient-to-br from-orange-500 to-pink-500 flex items-center justify-center">
               <GraduationCap className="h-6 w-6 text-white" />
             </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">
-              CourseMini
-            </span>
+            <div>
+              <span className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">CourseMini</span>
+              <p className="text-xs text-muted-foreground">by EQC Institute</p>
+            </div>
           </div>
 
           <p className="text-sm uppercase tracking-widest text-muted-foreground mb-2">Certificate of Completion</p>

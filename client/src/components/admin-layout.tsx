@@ -102,7 +102,10 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
               <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-orange-500 to-pink-500 flex items-center justify-center">
                 <GraduationCap className="h-4 w-4 text-white" />
               </div>
-              <span className="font-bold text-sm">CourseMini</span>
+              <div>
+                <span className="font-bold text-sm">CourseMini</span>
+                <p className="text-[9px] text-muted-foreground leading-none">by EQC Institute</p>
+              </div>
             </div>
           </Link>
         </div>

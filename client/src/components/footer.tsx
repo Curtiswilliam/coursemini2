@@ -7,7 +7,7 @@ export function Footer() {
     queryKey: ["/api/site-settings"],
   });
 
-  const siteName = settings?.siteName || "CourseMini";
+  const siteName = settings?.siteName || "CourseMini by EQC Institute";
   const footerText = settings?.footerText || "The modern platform for creating and selling online courses. Empower learners worldwide.";
   const socialTwitter = settings?.socialTwitter;
   const socialLinkedin = settings?.socialLinkedin;
@@ -22,7 +22,10 @@ export function Footer() {
               <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-orange-500 to-pink-500">
                 <GraduationCap className="h-4 w-4 text-primary-foreground" />
               </div>
-              <span className="font-bold">{siteName}</span>
+              <div>
+                <span className="font-bold">CourseMini</span>
+                <p className="text-[10px] text-muted-foreground leading-none">by EQC Institute</p>
+              </div>
             </div>
             <p className="text-sm text-muted-foreground">
               {footerText}
@@ -65,7 +68,7 @@ export function Footer() {
           <div>
             <h4 className="font-semibold text-sm mb-3">Support</h4>
             <div className="flex flex-col gap-2">
-              <span className="text-sm text-muted-foreground">help@coursemini.com</span>
+              <span className="text-sm text-muted-foreground">hello@eqcinstitute.com</span>
               <span className="text-sm text-muted-foreground">Privacy Policy</span>
               <span className="text-sm text-muted-foreground">Terms of Service</span>
             </div>

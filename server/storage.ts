@@ -1942,7 +1942,7 @@ export class DatabaseStorage implements IStorage {
           ${blocksHtml}
         </td></tr>
         <tr><td style="padding:20px 40px;background:#f9fafb;text-align:center;font-size:12px;color:#9ca3af;">
-          Sent by CourseMini • <a href="{{siteUrl}}" style="color:#9ca3af;">{{siteUrl}}</a>
+          Sent by CourseMini by EQC Institute • <a href="{{siteUrl}}" style="color:#9ca3af;">{{siteUrl}}</a>
         </td></tr>
       </table>
     </td></tr>
@@ -2005,11 +2005,11 @@ export class DatabaseStorage implements IStorage {
     const templates = [
       {
         name: "Welcome Email",
-        subject: "Welcome to CourseMini, {{studentName}}!",
+        subject: "Welcome to CourseMini by EQC Institute, {{studentName}}!",
         isSystem: true,
         blocks: makeBlocks(
-          "Welcome to CourseMini! 🎉",
-          "Hi {{studentName}},<br><br>We're thrilled to have you on board. CourseMini is your go-to platform for learning new skills and advancing your career. Start exploring our courses today!",
+          "Welcome to CourseMini by EQC Institute! 🎉",
+          "Hi {{studentName}},<br><br>We're thrilled to have you on board. CourseMini by EQC Institute is your go-to platform for learning new skills and advancing your career. Start exploring our courses today!",
           "Start Learning",
           "{{siteUrl}}",
           "#6366f1"

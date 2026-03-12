@@ -74,7 +74,7 @@ app.use((req, res, next) => {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CourseMini — Coming Soon</title>
+  <title>CourseMini by EQC Institute — Coming Soon</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -138,6 +138,7 @@ app.use((req, res, next) => {
   <div class="card">
     <div class="logo">🎓</div>
     <h1>CourseMini</h1>
+    <p style="font-size:11px;color:#555;margin-bottom:4px;margin-top:-16px;">by EQC Institute</p>
     <p>This site is in private beta. Enter the access code to continue.</p>
     <form method="POST">
       <input type="hidden" name="returnTo" value="${returnTo}" />

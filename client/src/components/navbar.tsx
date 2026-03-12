@@ -29,7 +29,7 @@ export function Navbar() {
               <div className="flex h-9 w-9 items-center justify-center rounded-md bg-gradient-to-br from-orange-500 to-pink-500">
                 <GraduationCap className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="text-lg font-bold tracking-tight">CourseMini</span>
+              <span className="text-lg font-bold tracking-tight">CourseMini <span className="text-xs font-normal text-muted-foreground hidden sm:inline">by EQC Institute</span></span>
             </Link>
             <div className="hidden md:flex items-center gap-1">
               <Link href="/courses">
