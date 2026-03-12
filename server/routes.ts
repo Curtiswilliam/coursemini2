@@ -1,6 +1,8 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import pg from "pg";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
 import path from "path";
@@ -46,8 +48,16 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  const PgSession = connectPgSimple(session);
+  const sessionPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+
   app.use(
     session({
+      store: new PgSession({
+        pool: sessionPool,
+        tableName: "user_sessions",
+        createTableIfMissing: true,
+      }),
       secret: process.env.SESSION_SECRET || "coursemini-secret-key",
       resave: false,
       saveUninitialized: false,
