@@ -49,6 +49,106 @@ app.use(
 app.use(express.urlencoded({ extended: false }));
 app.use(express.text({ type: "text/plain", limit: "10kb" }));
 
+// ========== SITE PASSWORD GATE ==========
+const SITE_PASSWORD = process.env.SITE_PASSWORD || "minime";
+const GATE_COOKIE = "site_access";
+
+app.use((req, res, next) => {
+  // Skip for API routes and the password endpoint itself
+  if (req.path.startsWith("/api") || req.path === "/__gate") return next();
+
+  const cookies = req.headers.cookie || "";
+  const hasAccess = cookies.split(";").some(c => c.trim() === `${GATE_COOKIE}=1`);
+  if (hasAccess) return next();
+
+  // Handle password form submission
+  if (req.method === "POST" && req.body?.password === SITE_PASSWORD) {
+    res.setHeader("Set-Cookie", `${GATE_COOKIE}=1; Path=/; HttpOnly; Max-Age=86400`);
+    return res.redirect(req.body.returnTo || "/");
+  }
+
+  // Show password page
+  const returnTo = req.path;
+  res.status(401).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CourseMini — Coming Soon</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0f0f0f;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #fff;
+    }
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 16px;
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    .logo {
+      width: 56px; height: 56px;
+      background: linear-gradient(135deg, #f97316, #ec4899);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 24px;
+      font-size: 28px;
+    }
+    h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+    p { color: #888; font-size: 14px; margin-bottom: 32px; }
+    input[type=password] {
+      width: 100%;
+      padding: 12px 16px;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 16px;
+      outline: none;
+      margin-bottom: 12px;
+      transition: border-color 0.2s;
+    }
+    input[type=password]:focus { border-color: #f97316; }
+    button {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #f97316, #ec4899);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    button:hover { opacity: 0.9; }
+    .error { color: #ef4444; font-size: 13px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">🎓</div>
+    <h1>CourseMini</h1>
+    <p>This site is in private beta. Enter the access code to continue.</p>
+    <form method="POST">
+      <input type="hidden" name="returnTo" value="${returnTo}" />
+      <input type="password" name="password" placeholder="Enter access code" autofocus />
+      <button type="submit">Enter</button>
+    </form>
+  </div>
+</body>
+</html>`);
+});
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
