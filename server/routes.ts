@@ -1609,6 +1609,21 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
+  app.post("/api/admin/groups/:id/members/by-email", requireAdmin as any, async (req, res) => {
+    try {
+      const groupId = parseIdParam(req.params.id);
+      if (groupId === null) return res.status(400).json({ message: "Invalid group ID" });
+      const email = String(req.body.email || "").trim().toLowerCase();
+      if (!email) return res.status(400).json({ message: "Email is required" });
+      const user = await storage.getUserByEmail(email);
+      if (!user) return res.status(404).json({ message: `No account found for ${email}` });
+      await storage.addStudentToGroup(groupId, user.id);
+      res.json({ ok: true, user: { id: user.id, name: user.name, email: user.email } });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
   app.delete("/api/admin/groups/:id/members/:userId", requireAdmin as any, async (req, res) => {
     try {
       const groupId = parseIdParam(req.params.id);

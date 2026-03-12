@@ -8,9 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Trash2, Users, X } from "lucide-react";
+import { Plus, Trash2, Users, X, Mail } from "lucide-react";
 
 export default function AdminGroups() {
   const { toast } = useToast();
@@ -18,6 +19,7 @@ export default function AdminGroups() {
   const [selectedGroup, setSelectedGroup] = useState<any>(null);
   const [form, setForm] = useState({ name: "", description: "", courseId: "" });
   const [studentToAdd, setStudentToAdd] = useState("");
+  const [manualEmail, setManualEmail] = useState("");
 
   const { data: groups, isLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/groups"],
@@ -58,6 +60,17 @@ export default function AdminGroups() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/groups"] });
       setStudentToAdd("");
       toast({ title: "Student added!" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const addByEmailMutation = useMutation({
+    mutationFn: async ({ groupId, email }: { groupId: number; email: string }) =>
+      apiRequest("POST", `/api/admin/groups/${groupId}/members/by-email`, { email }),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/groups"] });
+      setManualEmail("");
+      toast({ title: "Student added!", description: data.user?.name || data.user?.email });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -142,29 +155,65 @@ export default function AdminGroups() {
                 <CardTitle className="text-base">{currentGroupData.name} — Members</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Select value={studentToAdd} onValueChange={setStudentToAdd}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Add a student..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {students?.filter((s: any) => !currentGroupData.members?.some((m: any) => m?.id === s.id)).map((s: any) => (
-                        <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.email})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    size="sm"
-                    disabled={!studentToAdd || addStudentMutation.isPending}
-                    onClick={() => {
-                      if (studentToAdd) {
-                        addStudentMutation.mutate({ groupId: currentGroupData.id, userId: parseInt(studentToAdd) });
-                      }
-                    }}
-                  >
-                    Add
-                  </Button>
-                </div>
+                <Tabs defaultValue="search">
+                  <TabsList className="w-full">
+                    <TabsTrigger value="search" className="flex-1">Search Students</TabsTrigger>
+                    <TabsTrigger value="email" className="flex-1">
+                      <Mail className="h-3.5 w-3.5 mr-1.5" />
+                      Add by Email
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="search" className="mt-2">
+                    <div className="flex gap-2">
+                      <Select value={studentToAdd} onValueChange={setStudentToAdd}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a student..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {students?.filter((s: any) => !currentGroupData.members?.some((m: any) => m?.id === s.id)).map((s: any) => (
+                            <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.email})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        disabled={!studentToAdd || addStudentMutation.isPending}
+                        onClick={() => {
+                          if (studentToAdd) addStudentMutation.mutate({ groupId: currentGroupData.id, userId: parseInt(studentToAdd) });
+                        }}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="email" className="mt-2">
+                    <div className="flex gap-2">
+                      <Input
+                        type="email"
+                        placeholder="Enter email address..."
+                        value={manualEmail}
+                        onChange={(e) => setManualEmail(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && manualEmail) {
+                            addByEmailMutation.mutate({ groupId: currentGroupData.id, email: manualEmail });
+                          }
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        disabled={!manualEmail || addByEmailMutation.isPending}
+                        onClick={() => {
+                          if (manualEmail) addByEmailMutation.mutate({ groupId: currentGroupData.id, email: manualEmail });
+                        }}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      Type the exact email address of the account to add them to this group.
+                    </p>
+                  </TabsContent>
+                </Tabs>
                 <div className="space-y-2">
                   {currentGroupData.members?.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">No members yet</p>
