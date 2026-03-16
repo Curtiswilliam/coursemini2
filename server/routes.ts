@@ -60,7 +60,7 @@ export async function registerRoutes(
         tableName: "user_sessions",
         createTableIfMissing: true,
       }),
-      secret: process.env.SESSION_SECRET || "coursemini-secret-key",
+      secret: process.env.SESSION_SECRET || (process.env.NODE_ENV === "production" ? (() => { throw new Error("SESSION_SECRET must be set in production"); })() : "dev-only-secret"),
       resave: false,
       saveUninitialized: false,
       cookie: {
@@ -166,7 +166,7 @@ export async function registerRoutes(
       } as any);
 
       // Generate 6-digit code and store it
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const code = (100000 + (crypto.randomInt(900000))).toString();
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
       await storage.createEmailVerification(user.id, code, expiresAt);
 
@@ -216,7 +216,7 @@ export async function registerRoutes(
   // Resend email code
   app.post("/api/auth/resend-email-code", requireAuth, async (req, res) => {
     try {
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const code = (100000 + (crypto.randomInt(900000))).toString();
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
       await storage.createEmailVerification(req.session.userId!, code, expiresAt);
       const user = await storage.getUser(req.session.userId!);
@@ -236,7 +236,7 @@ export async function registerRoutes(
       if (!phone || typeof phone !== "string" || phone.trim().length < 7) {
         return res.status(400).json({ message: "A valid phone number is required" });
       }
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const code = (100000 + (crypto.randomInt(900000))).toString();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
       await storage.createPhoneVerification(req.session.userId!, phone.trim(), code, expiresAt);
       if (process.env.NODE_ENV !== "production") {
@@ -311,11 +311,13 @@ export async function registerRoutes(
       if (!username || typeof username !== "string" || !password || typeof password !== "string") {
         return res.status(400).json({ message: "Username and password are required" });
       }
-      // Accept email or username
+      // Accept email or username — always run comparePasswords to prevent timing-based user enumeration
       const user = username.includes("@")
         ? await storage.getUserByEmail(username.trim().toLowerCase())
         : await storage.getUserByUsername(username);
-      if (!user || !(await comparePasswords(password, user.password))) {
+      const DUMMY_HASH = "0000000000000000000000000000000000000000000000000000000000000000.0000000000000000";
+      const passwordValid = await comparePasswords(password, user?.password ?? DUMMY_HASH);
+      if (!user || !passwordValid) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
       req.session.userId = user.id;
@@ -1052,7 +1054,7 @@ export async function registerRoutes(
       destination: (_req, _file, cb) => cb(null, uploadDir),
       filename: (_req, file, cb) => {
         const ext = path.extname(file.originalname);
-        cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+        cb(null, `${Date.now()}-${crypto.randomBytes(8).toString("hex")}${ext}`);
       },
     }),
     limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB

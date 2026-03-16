@@ -50,10 +50,17 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.text({ type: "text/plain", limit: "10kb" }));
 
 // ========== SITE PASSWORD GATE ==========
-const SITE_PASSWORD = process.env.SITE_PASSWORD || "minime";
+const SITE_PASSWORD = process.env.SITE_PASSWORD;
 const GATE_COOKIE = "site_access";
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 app.use((req, res, next) => {
+  // Skip if no site password is configured
+  if (!SITE_PASSWORD) return next();
+
   // Skip for API routes and the password endpoint itself
   if (req.path.startsWith("/api") || req.path === "/__gate") return next();
 
@@ -63,12 +70,17 @@ app.use((req, res, next) => {
 
   // Handle password form submission
   if (req.method === "POST" && req.body?.password === SITE_PASSWORD) {
-    res.setHeader("Set-Cookie", `${GATE_COOKIE}=1; Path=/; HttpOnly; Max-Age=86400`);
-    return res.redirect(req.body.returnTo || "/");
+    const isProduction = process.env.NODE_ENV === "production";
+    const securePart = isProduction ? "; Secure" : "";
+    res.setHeader("Set-Cookie", `${GATE_COOKIE}=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${securePart}`);
+    // Only allow relative redirects to prevent open redirect
+    const returnTo = req.body.returnTo;
+    const safePath = typeof returnTo === "string" && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/";
+    return res.redirect(safePath);
   }
 
-  // Show password page
-  const returnTo = req.path;
+  // Show password page — escape returnTo to prevent XSS
+  const returnTo = escapeHtml(req.path);
   res.status(401).send(`<!DOCTYPE html>
 <html lang="en">
 <head>
