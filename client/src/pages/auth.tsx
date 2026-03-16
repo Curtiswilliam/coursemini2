@@ -25,7 +25,6 @@ const loginSchema = z.object({
 function LoginForm() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<z.infer<typeof loginSchema>>({
@@ -36,16 +35,15 @@ function LoginForm() {
   async function onSubmit(values: z.infer<typeof loginSchema>) {
     setIsLoading(true);
     try {
-      await login(values.username, values.password);
+      const res = await apiRequest("POST", "/api/auth/login", { username: values.username, password: values.password });
+      const me = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Welcome back!" });
       const params = new URLSearchParams(window.location.search);
       const returnTo = params.get("returnTo");
       if (returnTo) {
         navigate(returnTo);
       } else {
-        // Redirect admins/instructors to admin dashboard, students to student area
-        const meRes = await fetch("/api/auth/me", { credentials: "include" });
-        const me = await meRes.json();
         navigate(me.role === "ADMIN" || me.role === "INSTRUCTOR" ? "/admin" : "/dashboard");
       }
     } catch (e: any) {
