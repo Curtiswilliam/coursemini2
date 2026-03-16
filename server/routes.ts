@@ -11,6 +11,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { storage } from "./storage";
 import { hashPassword, comparePasswords } from "./auth";
 import { fireCampaignTrigger } from "./campaigns";
+import { sendPasswordResetEmail } from "./email";
+import crypto from "crypto";
 import type { User } from "@shared/schema";
 
 // ========== BADGE DEFINITIONS ==========
@@ -366,6 +368,79 @@ export async function registerRoutes(
       }
       console.warn(`[SECURITY] User userId=${user.id} (${user.username}) was promoted to ADMIN from IP=${req.ip}`);
       res.json({ id: user.id, username: user.username, name: user.name, email: user.email, role: user.role });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  // ─── Forgot / Reset Password ──────────────────────────────────────────────
+  app.post("/api/auth/forgot-password", authRateLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== "string" || !email.includes("@")) {
+        return res.status(400).json({ message: "A valid email is required" });
+      }
+      const user = await storage.getUserByEmail(email.trim().toLowerCase());
+      // Always respond 200 so we don't reveal whether an account exists
+      if (!user) {
+        return res.json({ ok: true });
+      }
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+      await storage.createPasswordResetToken(user.id, token, expiresAt);
+      const appUrl = process.env.APP_URL ?? `http://localhost:5000`;
+      const resetUrl = `${appUrl}/reset-password?token=${token}`;
+      await sendPasswordResetEmail(user.email, resetUrl);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.post("/api/auth/reset-password", authRateLimiter, async (req, res) => {
+    try {
+      const { token, password } = req.body;
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({ message: "Token is required" });
+      }
+      if (!password || typeof password !== "string" || password.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+      const record = await storage.getPasswordResetToken(token);
+      if (!record) {
+        return res.status(400).json({ message: "Invalid or expired reset link" });
+      }
+      if (record.usedAt) {
+        return res.status(400).json({ message: "This reset link has already been used" });
+      }
+      if (new Date() > record.expiresAt) {
+        return res.status(400).json({ message: "This reset link has expired" });
+      }
+      const hashedPassword = await hashPassword(password);
+      await storage.updateUser(record.userId, { password: hashedPassword });
+      await storage.markPasswordResetTokenUsed(record.id);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.patch("/api/auth/update-email", async (req, res) => {
+    try {
+      if (!req.session.userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const { email } = req.body;
+      if (!email || typeof email !== "string" || !email.includes("@")) {
+        return res.status(400).json({ message: "A valid email is required" });
+      }
+      const normalized = email.trim().toLowerCase();
+      const existing = await storage.getUserByEmail(normalized);
+      if (existing && existing.id !== req.session.userId) {
+        return res.status(409).json({ message: "That email is already in use" });
+      }
+      const user = await storage.updateUser(req.session.userId, { email: normalized });
+      res.json({ ok: true, email: user?.email });
     } catch (e: any) {
       res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
     }

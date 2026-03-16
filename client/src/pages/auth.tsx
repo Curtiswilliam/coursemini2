@@ -94,6 +94,11 @@ function LoginForm() {
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Log In
             </Button>
+            <p className="text-center text-sm text-muted-foreground">
+              <a href="/forgot-password" className="text-primary underline">
+                Forgot your password?
+              </a>
+            </p>
           </form>
         </Form>
       </CardContent>

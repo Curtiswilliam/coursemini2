@@ -7,7 +7,7 @@ import {
   studentGroups, studentGroupMembers,
   quizzes, quizQuestions, quizOptions, quizAttempts,
   affiliates, affiliateReferrals, notifications,
-  lessonBlocks, emailVerifications, phoneVerifications,
+  lessonBlocks, emailVerifications, phoneVerifications, passwordResetTokens,
   emailCampaigns, campaignSends, coursePathways, pathwaySteps, userPathwayProgress,
   userBadges, activityEvents,
   emailTemplateCategories, emailTemplates, emailAutomations,
@@ -54,6 +54,10 @@ export interface IStorage {
   createPhoneVerification(userId: number, phone: string, code: string, expiresAt: Date): Promise<void>;
   getLatestPhoneVerification(userId: number): Promise<any | undefined>;
   markPhoneVerificationUsed(id: number): Promise<void>;
+
+  createPasswordResetToken(userId: number, token: string, expiresAt: Date): Promise<void>;
+  getPasswordResetToken(token: string): Promise<any | undefined>;
+  markPasswordResetTokenUsed(id: number): Promise<void>;
 
   getCategories(): Promise<Category[]>;
   createCategory(category: InsertCategory): Promise<Category>;
@@ -236,6 +240,19 @@ export class DatabaseStorage implements IStorage {
 
   async markPhoneVerificationUsed(id: number): Promise<void> {
     await db.update(phoneVerifications).set({ usedAt: new Date() }).where(eq(phoneVerifications.id, id));
+  }
+
+  async createPasswordResetToken(userId: number, token: string, expiresAt: Date): Promise<void> {
+    await db.insert(passwordResetTokens).values({ userId, token, expiresAt });
+  }
+
+  async getPasswordResetToken(token: string): Promise<any | undefined> {
+    const [row] = await db.select().from(passwordResetTokens).where(eq(passwordResetTokens.token, token));
+    return row;
+  }
+
+  async markPasswordResetTokenUsed(id: number): Promise<void> {
+    await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, id));
   }
 
   async getUsers(): Promise<User[]> {

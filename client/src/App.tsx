@@ -31,6 +31,8 @@ import AdminGroups from "@/pages/admin/groups";
 import AdminStudentProfile from "@/pages/admin/student-profile";
 import EmailTemplates from "@/pages/admin/email-templates";
 import EmailTemplateEditor from "@/pages/admin/email-template-editor";
+import ForgotPasswordPage from "@/pages/forgot-password";
+import ResetPasswordPage from "@/pages/reset-password";
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -87,6 +89,8 @@ function PublicRouter() {
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/auth" component={AuthPage} />
+          <Route path="/forgot-password" component={ForgotPasswordPage} />
+          <Route path="/reset-password" component={ResetPasswordPage} />
           <Route path="/courses" component={CoursesPage} />
           <Route path="/courses/:slug" component={CourseDetailPage} />
           <Route path="/dashboard" component={Dashboard} />

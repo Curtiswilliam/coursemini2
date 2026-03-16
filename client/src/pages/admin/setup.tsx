@@ -751,15 +751,25 @@ const setupSchema = z.object({
   secret: z.string().min(1, "Admin secret is required"),
 });
 
+const emailSchema = z.object({
+  email: z.string().email("Enter a valid email address"),
+});
+
 function AdminAccessTab() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
 
   const form = useForm<z.infer<typeof setupSchema>>({
     resolver: zodResolver(setupSchema),
     defaultValues: { secret: "" },
+  });
+
+  const emailForm = useForm<z.infer<typeof emailSchema>>({
+    resolver: zodResolver(emailSchema),
+    defaultValues: { email: user?.email ?? "" },
   });
 
   const onSubmit = async (values: z.infer<typeof setupSchema>) => {
@@ -776,15 +786,58 @@ function AdminAccessTab() {
     }
   };
 
+  const onEmailSubmit = async (values: z.infer<typeof emailSchema>) => {
+    setEmailLoading(true);
+    try {
+      await apiRequest("PATCH", "/api/auth/update-email", { email: values.email });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "Email updated", description: "Your admin email address has been saved." });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
   if (user?.role === "ADMIN") {
     return (
-      <Card className="max-w-md">
-        <CardContent className="p-8 text-center">
-          <Shield className="h-12 w-12 mx-auto text-primary mb-4" />
-          <h3 className="font-semibold mb-2">You're Already an Admin</h3>
-          <p className="text-sm text-muted-foreground">Your account already has super admin privileges.</p>
-        </CardContent>
-      </Card>
+      <div className="space-y-6 max-w-md">
+        <Card>
+          <CardContent className="p-6 flex items-center gap-4">
+            <Shield className="h-10 w-10 text-primary shrink-0" />
+            <div>
+              <h3 className="font-semibold">You're a Super Admin</h3>
+              <p className="text-sm text-muted-foreground">Your account has full admin privileges.</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Mail className="h-4 w-4" /> Admin Email Address
+            </CardTitle>
+            <CardDescription>Update the email address associated with your admin account.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...emailForm}>
+              <form onSubmit={emailForm.handleSubmit(onEmailSubmit)} className="space-y-4">
+                <FormField control={emailForm.control} name="email" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email address</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="admin@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <Button type="submit" disabled={emailLoading}>
+                  {emailLoading ? "Saving..." : "Save Email"}
+                </Button>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 

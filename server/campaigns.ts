@@ -1,4 +1,5 @@
 import { storage } from "./storage";
+import { sendEmail } from "./email";
 
 type TriggerType = "USER_SIGNUP" | "EMAIL_VERIFIED" | "COURSE_ENROLLED" | "COURSE_COMPLETED" | "PATHWAY_STEP_COMPLETED";
 
@@ -9,8 +10,17 @@ function renderTemplate(template: string, vars: Record<string, string>): string 
 async function dispatchSend(sendId: number, campaign: any, user: any, vars: Record<string, string>) {
   const subject = renderTemplate(campaign.subject, vars);
   const body = renderTemplate(campaign.body, vars);
-  console.log(`\n📧 [CAMPAIGN] "${campaign.name}"\n   To: ${user.email} (${user.name})\n   Subject: ${subject}\n${body.split("\n").map((l: string) => `   ${l}`).join("\n")}\n`);
-  await storage.updateCampaignSend(sendId, { status: "SENT", sentAt: new Date() });
+  try {
+    await sendEmail({
+      to: { email: user.email, name: user.name },
+      subject,
+      html: body,
+    });
+    await storage.updateCampaignSend(sendId, { status: "SENT", sentAt: new Date() });
+  } catch (e) {
+    await storage.updateCampaignSend(sendId, { status: "FAILED", error: String(e) });
+    throw e;
+  }
 }
 
 export async function fireCampaignTrigger(
