@@ -37,7 +37,7 @@ function LoginForm() {
     try {
       const res = await apiRequest("POST", "/api/auth/login", { username: values.username, password: values.password });
       const me = await res.json();
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.setQueryData(["/api/auth/me"], me);
       toast({ title: "Welcome back!" });
       const params = new URLSearchParams(window.location.search);
       const returnTo = params.get("returnTo");
