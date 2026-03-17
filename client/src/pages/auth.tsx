@@ -365,9 +365,6 @@ function RegisterWizard() {
                   Resend code
                 </button>
               </p>
-              <p className="text-center text-xs text-muted-foreground bg-muted rounded p-2">
-                During development, codes are printed to the server console.
-              </p>
             </form>
           </Form>
         )}
@@ -428,9 +425,6 @@ function RegisterWizard() {
                 <button type="button" onClick={onResendPhone} className="text-primary underline">
                   Resend code
                 </button>
-              </p>
-              <p className="text-center text-xs text-muted-foreground bg-muted rounded p-2">
-                During development, codes are printed to the server console.
               </p>
             </form>
           </Form>

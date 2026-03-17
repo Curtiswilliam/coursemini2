@@ -11,7 +11,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { storage } from "./storage";
 import { hashPassword, comparePasswords } from "./auth";
 import { fireCampaignTrigger } from "./campaigns";
-import { sendPasswordResetEmail } from "./email";
+import { sendEmail, sendPasswordResetEmail } from "./email";
 import crypto from "crypto";
 import type { User } from "@shared/schema";
 
@@ -34,6 +34,12 @@ const BADGE_DEFINITIONS = [
 declare module "express-session" {
   interface SessionData {
     userId: number;
+  }
+}
+
+declare module "express-serve-static-core" {
+  interface Request {
+    currentUser?: User;
   }
 }
 
@@ -66,7 +72,7 @@ export async function registerRoutes(
       cookie: {
         maxAge: 7 * 24 * 60 * 60 * 1000,
         httpOnly: true,
-        sameSite: "strict",
+        sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
       },
     })
@@ -118,7 +124,7 @@ export async function registerRoutes(
     if (!user || (user.role !== "ADMIN" && user.role !== "INSTRUCTOR")) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    (req as Request & { currentUser: User }).currentUser = user;
+    req.currentUser = user;
     next();
   }
 
@@ -170,10 +176,12 @@ export async function registerRoutes(
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
       await storage.createEmailVerification(user.id, code, expiresAt);
 
-      // In development, log the code. In production, send email.
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`\n📧 Email verification code for ${normalizedEmail}: ${code}\n`);
-      }
+      // Send verification email
+      sendEmail({
+        to: { email: normalizedEmail },
+        subject: "Verify your CourseMini email",
+        html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto"><h2>Verify your email</h2><p>Your verification code is:</p><div style="font-size:32px;font-weight:700;letter-spacing:8px;margin:16px 0;color:#f97316">${code}</div><p style="color:#666;font-size:13px">This code expires in 15 minutes. If you didn't create a CourseMini account, ignore this email.</p></div>`,
+      }).catch((e) => console.error("[email] Failed to send verification email:", e));
 
       req.session.userId = user.id;
       fireCampaignTrigger("USER_SIGNUP", user.id).catch(() => {});
@@ -220,8 +228,12 @@ export async function registerRoutes(
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
       await storage.createEmailVerification(req.session.userId!, code, expiresAt);
       const user = await storage.getUser(req.session.userId!);
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`\n📧 Email verification code for ${user?.email}: ${code}\n`);
+      if (user) {
+        sendEmail({
+          to: { email: user.email },
+          subject: "Your new CourseMini verification code",
+          html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto"><h2>New verification code</h2><p>Your verification code is:</p><div style="font-size:32px;font-weight:700;letter-spacing:8px;margin:16px 0;color:#f97316">${code}</div><p style="color:#666;font-size:13px">This code expires in 15 minutes.</p></div>`,
+        }).catch((e) => console.error("[email] Failed to resend verification email:", e));
       }
       res.json({ ok: true });
     } catch (e: any) {
@@ -239,9 +251,7 @@ export async function registerRoutes(
       const code = (100000 + (crypto.randomInt(900000))).toString();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
       await storage.createPhoneVerification(req.session.userId!, phone.trim(), code, expiresAt);
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`\n📱 SMS verification code for ${phone.trim()}: ${code}\n`);
-      }
+      // TODO: integrate SMS provider (e.g. ClickSend SMS) to send code to phone.trim()
       res.json({ ok: true });
     } catch (e: any) {
       res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
@@ -891,7 +901,7 @@ export async function registerRoutes(
   });
 
   // ========== CERTIFICATES ==========
-  app.get("/api/admin/certificates", requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/certificates", requireAdmin, async (req, res) => {
     const allCerts = await storage.getAllCertificates();
     res.json(allCerts);
   });
@@ -983,23 +993,23 @@ export async function registerRoutes(
 
 
   // ========== ADMIN STATS ==========
-  app.get("/api/admin/stats", requireAdmin as any, async (req, res) => {
-    const user = (req as any).currentUser;
+  app.get("/api/admin/stats", requireAdmin, async (req, res) => {
+    const user = req.currentUser!;
     const stats = await storage.getAdminStats(user.id);
     res.json(stats);
   });
 
   // ========== ADMIN COURSES ==========
-  app.get("/api/admin/courses", requireAdmin as any, async (req, res) => {
-    const user = (req as any).currentUser;
+  app.get("/api/admin/courses", requireAdmin, async (req, res) => {
+    const user = req.currentUser!;
     const instructorCourses = user.role === "ADMIN"
       ? await storage.getCourses({ allStatuses: true })
       : await storage.getCoursesByInstructor(user.id);
     res.json(instructorCourses);
   });
 
-  app.get("/api/admin/courses/:id", requireAdmin as any, async (req, res) => {
-    const user = (req as any).currentUser as User;
+  app.get("/api/admin/courses/:id", requireAdmin, async (req, res) => {
+    const user = req.currentUser!;
     const courseId = parseIdParam(req.params.id);
     if (courseId === null) return res.status(400).json({ message: "Invalid course ID" });
     const course = await storage.getCourseById(courseId);
@@ -1012,9 +1022,9 @@ export async function registerRoutes(
     res.json(course);
   });
 
-  app.post("/api/admin/courses", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/courses", requireAdmin, async (req, res) => {
     try {
-      const user = (req as any).currentUser as User;
+      const user = req.currentUser!;
       if (!req.body.title || typeof req.body.title !== "string" || req.body.title.trim().length < 3) {
         return res.status(400).json({ message: "Course title must be at least 3 characters" });
       }
@@ -1029,9 +1039,9 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/admin/courses/:id", requireAdmin as any, async (req, res) => {
+  app.patch("/api/admin/courses/:id", requireAdmin, async (req, res) => {
     try {
-      const user = (req as any).currentUser as User;
+      const user = req.currentUser!;
       const courseId = parseIdParam(req.params.id);
       if (courseId === null) return res.status(400).json({ message: "Invalid course ID" });
       const existing = await storage.getCourseById(courseId);
@@ -1064,13 +1074,13 @@ export async function registerRoutes(
     },
   });
 
-  app.post("/api/admin/upload", requireAdmin as any, upload.single("file"), (req: any, res) => {
+  app.post("/api/admin/upload", requireAdmin, upload.single("file"), (req: any, res) => {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
     res.json({ url: `/uploads/${req.file.filename}` });
   });
 
   // ─── Course duplication ────────────────────────────────────────────────────────
-  app.post("/api/admin/courses/:id/duplicate", requireAdmin as any, async (req: any, res) => {
+  app.post("/api/admin/courses/:id/duplicate", requireAdmin, async (req: any, res) => {
     try {
       const courseId = parseIdParam(req.params.id);
       if (courseId === null) return res.status(400).json({ message: "Invalid ID" });
@@ -1152,7 +1162,7 @@ export async function registerRoutes(
   });
 
   // ─── AI outline generator ──────────────────────────────────────────────────────
-  app.post("/api/admin/lessons/:id/generate-outline", requireAdmin as any, async (req: any, res) => {
+  app.post("/api/admin/lessons/:id/generate-outline", requireAdmin, async (req: any, res) => {
     try {
       const lessonId = parseIdParam(req.params.id);
       if (lessonId === null) return res.status(400).json({ message: "Invalid ID" });
@@ -1242,9 +1252,9 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     return false;
   }
 
-  app.post("/api/admin/subjects", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/subjects", requireAdmin, async (req, res) => {
     try {
-      const user = (req as any).currentUser as User;
+      const user = req.currentUser!;
       const courseId = parseIdParam(String(req.body.courseId));
       if (courseId === null) return res.status(400).json({ message: "Invalid course ID" });
       if (!await verifyCourseOwnership(courseId, user)) {
@@ -1257,9 +1267,9 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.patch("/api/admin/subjects/:id", requireAdmin as any, async (req, res) => {
+  app.patch("/api/admin/subjects/:id", requireAdmin, async (req, res) => {
     try {
-      const user = (req as any).currentUser as User;
+      const user = req.currentUser!;
       const subjectId = parseIdParam(req.params.id);
       if (subjectId === null) return res.status(400).json({ message: "Invalid subject ID" });
       if (!await verifySubjectOwnership(subjectId, user)) {
@@ -1272,9 +1282,9 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.delete("/api/admin/subjects/:id", requireAdmin as any, async (req, res) => {
+  app.delete("/api/admin/subjects/:id", requireAdmin, async (req, res) => {
     try {
-      const user = (req as any).currentUser as User;
+      const user = req.currentUser!;
       const subjectId = parseIdParam(req.params.id);
       if (subjectId === null) return res.status(400).json({ message: "Invalid subject ID" });
       if (!await verifySubjectOwnership(subjectId, user)) {
@@ -1287,9 +1297,9 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.post("/api/admin/modules", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/modules", requireAdmin, async (req, res) => {
     try {
-      const user = (req as any).currentUser as User;
+      const user = req.currentUser!;
       const subjectId = parseIdParam(String(req.body.subjectId));
       if (subjectId === null) return res.status(400).json({ message: "Invalid subject ID" });
       if (!await verifySubjectOwnership(subjectId, user)) {
@@ -1302,7 +1312,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.patch("/api/admin/modules/:id", requireAdmin as any, async (req, res) => {
+  app.patch("/api/admin/modules/:id", requireAdmin, async (req, res) => {
     try {
       const modId = parseIdParam(req.params.id);
       if (modId === null) return res.status(400).json({ message: "Invalid module ID" });
@@ -1313,7 +1323,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.delete("/api/admin/modules/:id", requireAdmin as any, async (req, res) => {
+  app.delete("/api/admin/modules/:id", requireAdmin, async (req, res) => {
     try {
       const modId = parseIdParam(req.params.id);
       if (modId === null) return res.status(400).json({ message: "Invalid module ID" });
@@ -1324,7 +1334,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.post("/api/admin/lessons", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/lessons", requireAdmin, async (req, res) => {
     try {
       const lesson = await storage.createLesson(req.body);
       res.json(lesson);
@@ -1333,7 +1343,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.patch("/api/admin/lessons/:id", requireAdmin as any, async (req, res) => {
+  app.patch("/api/admin/lessons/:id", requireAdmin, async (req, res) => {
     try {
       const lessonId = parseIdParam(req.params.id);
       if (lessonId === null) return res.status(400).json({ message: "Invalid lesson ID" });
@@ -1344,7 +1354,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.delete("/api/admin/lessons/:id", requireAdmin as any, async (req, res) => {
+  app.delete("/api/admin/lessons/:id", requireAdmin, async (req, res) => {
     try {
       const lessonId = parseIdParam(req.params.id);
       if (lessonId === null) return res.status(400).json({ message: "Invalid lesson ID" });
@@ -1441,14 +1451,14 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // ========== ADMIN QUIZ ==========
-  app.get("/api/admin/lessons/:id/quiz", requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/lessons/:id/quiz", requireAdmin, async (req, res) => {
     const lessonId = parseIdParam(req.params.id);
     if (lessonId === null) return res.status(400).json({ message: "Invalid lesson ID" });
     const quiz = await storage.getQuizByLesson(lessonId);
     res.json(quiz || null);
   });
 
-  app.post("/api/admin/lessons/:id/quiz", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/lessons/:id/quiz", requireAdmin, async (req, res) => {
     try {
       const lessonId = parseIdParam(req.params.id);
       if (lessonId === null) return res.status(400).json({ message: "Invalid lesson ID" });
@@ -1462,9 +1472,9 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // ========== ADMIN ANALYTICS ==========
-  app.get("/api/admin/analytics", analyticsRateLimiter, requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/analytics", analyticsRateLimiter, requireAdmin, async (req, res) => {
     try {
-      const currentUser = (req as any).currentUser;
+      const currentUser = req.currentUser!;
       if (currentUser.role !== "ADMIN") {
         return res.status(403).json({ message: "Only admins can access platform analytics" });
       }
@@ -1476,12 +1486,12 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // ========== ADMIN STUDENTS ==========
-  app.get("/api/admin/students", requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/students", requireAdmin, async (req, res) => {
     const students = await storage.getStudents();
     res.json(students);
   });
 
-  app.get("/api/admin/students/:id", requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/students/:id", requireAdmin, async (req, res) => {
     try {
       const studentId = parseIdParam(req.params.id);
       if (studentId === null) return res.status(400).json({ message: "Invalid student ID" });
@@ -1498,8 +1508,8 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // ========== ADMIN USERS ==========
-  app.get("/api/admin/users", requireAdmin as any, async (req, res) => {
-    const currentUser = (req as any).currentUser;
+  app.get("/api/admin/users", requireAdmin, async (req, res) => {
+    const currentUser = req.currentUser!;
     if (currentUser.role !== "ADMIN") {
       return res.status(403).json({ message: "Only super admins can manage users" });
     }
@@ -1507,9 +1517,9 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     res.json(allUsers.map(u => ({ id: u.id, username: u.username, name: u.name, email: u.email, role: u.role })));
   });
 
-  app.patch("/api/admin/users/:id/role", requireAdmin as any, async (req, res) => {
+  app.patch("/api/admin/users/:id/role", requireAdmin, async (req, res) => {
     try {
-      const currentUser = (req as any).currentUser as User;
+      const currentUser = req.currentUser!;
       if (currentUser.role !== "ADMIN") {
         return res.status(403).json({ message: "Only super admins can manage users" });
       }
@@ -1530,12 +1540,12 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // ========== ADMIN COUPONS ==========
-  app.get("/api/admin/coupons", requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/coupons", requireAdmin, async (req, res) => {
     const couponList = await storage.getCoupons();
     res.json(couponList);
   });
 
-  app.post("/api/admin/coupons", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/coupons", requireAdmin, async (req, res) => {
     try {
       const coupon = await storage.createCoupon(req.body);
       res.json(coupon);
@@ -1544,7 +1554,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.delete("/api/admin/coupons/:id", requireAdmin as any, async (req, res) => {
+  app.delete("/api/admin/coupons/:id", requireAdmin, async (req, res) => {
     try {
       const couponId = parseIdParam(req.params.id);
       if (couponId === null) return res.status(400).json({ message: "Invalid coupon ID" });
@@ -1556,12 +1566,12 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // ========== ADMIN ORDERS ==========
-  app.get("/api/admin/orders", requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/orders", requireAdmin, async (req, res) => {
     const orderList = await storage.getOrders();
     res.json(orderList);
   });
 
-  app.get("/api/admin/orders/stats", requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/orders/stats", requireAdmin, async (req, res) => {
     const orderList = await storage.getOrders();
     const total = orderList.reduce((sum: number, o: any) => sum + (o.amount || 0), 0);
     const completed = orderList.filter((o: any) => o.status === "COMPLETED");
@@ -1574,12 +1584,12 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // ========== ADMIN BUNDLES ==========
-  app.get("/api/admin/bundles", requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/bundles", requireAdmin, async (req, res) => {
     const bundleList = await storage.getAllBundles();
     res.json(bundleList);
   });
 
-  app.post("/api/admin/bundles", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/bundles", requireAdmin, async (req, res) => {
     try {
       const bundle = await storage.createBundle(req.body);
       res.json(bundle);
@@ -1588,7 +1598,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.patch("/api/admin/bundles/:id", requireAdmin as any, async (req, res) => {
+  app.patch("/api/admin/bundles/:id", requireAdmin, async (req, res) => {
     try {
       const bundleId = parseIdParam(req.params.id);
       if (bundleId === null) return res.status(400).json({ message: "Invalid bundle ID" });
@@ -1599,7 +1609,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.delete("/api/admin/bundles/:id", requireAdmin as any, async (req, res) => {
+  app.delete("/api/admin/bundles/:id", requireAdmin, async (req, res) => {
     try {
       const bundleId = parseIdParam(req.params.id);
       if (bundleId === null) return res.status(400).json({ message: "Invalid bundle ID" });
@@ -1610,7 +1620,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.post("/api/admin/bundles/:id/courses", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/bundles/:id/courses", requireAdmin, async (req, res) => {
     try {
       const bundleId = parseIdParam(req.params.id);
       const courseId = parseIdParam(String(req.body.courseId));
@@ -1622,7 +1632,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.delete("/api/admin/bundles/:id/courses/:courseId", requireAdmin as any, async (req, res) => {
+  app.delete("/api/admin/bundles/:id/courses/:courseId", requireAdmin, async (req, res) => {
     try {
       const bundleId = parseIdParam(req.params.id);
       const courseId = parseIdParam(req.params.courseId);
@@ -1635,7 +1645,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // ========== ADMIN SITE SETTINGS ==========
-  app.post("/api/admin/site-settings", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/site-settings", requireAdmin, async (req, res) => {
     try {
       const settings = req.body as Record<string, string>;
       for (const [key, value] of Object.entries(settings)) {
@@ -1648,12 +1658,12 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // ========== ADMIN GROUPS ==========
-  app.get("/api/admin/groups", requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/groups", requireAdmin, async (req, res) => {
     const groups = await storage.getStudentGroups();
     res.json(groups);
   });
 
-  app.post("/api/admin/groups", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/groups", requireAdmin, async (req, res) => {
     try {
       const group = await storage.createStudentGroup(req.body);
       res.json(group);
@@ -1662,7 +1672,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.patch("/api/admin/groups/:id", requireAdmin as any, async (req, res) => {
+  app.patch("/api/admin/groups/:id", requireAdmin, async (req, res) => {
     try {
       const groupId = parseIdParam(req.params.id);
       if (groupId === null) return res.status(400).json({ message: "Invalid group ID" });
@@ -1673,7 +1683,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.delete("/api/admin/groups/:id", requireAdmin as any, async (req, res) => {
+  app.delete("/api/admin/groups/:id", requireAdmin, async (req, res) => {
     try {
       const groupId = parseIdParam(req.params.id);
       if (groupId === null) return res.status(400).json({ message: "Invalid group ID" });
@@ -1684,7 +1694,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.post("/api/admin/groups/:id/members", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/groups/:id/members", requireAdmin, async (req, res) => {
     try {
       const groupId = parseIdParam(req.params.id);
       const userId = parseIdParam(String(req.body.userId));
@@ -1696,7 +1706,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.post("/api/admin/groups/:id/members/by-email", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/groups/:id/members/by-email", requireAdmin, async (req, res) => {
     try {
       const groupId = parseIdParam(req.params.id);
       if (groupId === null) return res.status(400).json({ message: "Invalid group ID" });
@@ -1711,7 +1721,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.delete("/api/admin/groups/:id/members/:userId", requireAdmin as any, async (req, res) => {
+  app.delete("/api/admin/groups/:id/members/:userId", requireAdmin, async (req, res) => {
     try {
       const groupId = parseIdParam(req.params.id);
       const userId = parseIdParam(req.params.userId);
@@ -1735,7 +1745,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.post("/api/lessons/:id/blocks", requireAdmin as any, async (req, res) => {
+  app.post("/api/lessons/:id/blocks", requireAdmin, async (req, res) => {
     try {
       const lessonId = parseIdParam(req.params.id);
       if (lessonId === null) return res.status(400).json({ message: "Invalid lesson ID" });
@@ -1753,7 +1763,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.patch("/api/lessons/blocks/:blockId", requireAdmin as any, async (req, res) => {
+  app.patch("/api/lessons/blocks/:blockId", requireAdmin, async (req, res) => {
     try {
       const blockId = parseIdParam(req.params.blockId);
       if (blockId === null) return res.status(400).json({ message: "Invalid block ID" });
@@ -1764,7 +1774,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.delete("/api/lessons/blocks/:blockId", requireAdmin as any, async (req, res) => {
+  app.delete("/api/lessons/blocks/:blockId", requireAdmin, async (req, res) => {
     try {
       const blockId = parseIdParam(req.params.blockId);
       if (blockId === null) return res.status(400).json({ message: "Invalid block ID" });
@@ -1775,7 +1785,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.post("/api/lessons/:id/blocks/reorder", requireAdmin as any, async (req, res) => {
+  app.post("/api/lessons/:id/blocks/reorder", requireAdmin, async (req, res) => {
     try {
       const lessonId = parseIdParam(req.params.id);
       if (lessonId === null) return res.status(400).json({ message: "Invalid lesson ID" });
@@ -1787,7 +1797,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
-  app.post("/api/lessons/blocks/:blockId/duplicate", requireAdmin as any, async (req, res) => {
+  app.post("/api/lessons/blocks/:blockId/duplicate", requireAdmin, async (req, res) => {
     try {
       const blockId = parseIdParam(req.params.blockId);
       if (blockId === null) return res.status(400).json({ message: "Invalid block ID" });
@@ -1800,7 +1810,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
 
 
   // ========== EMAIL CAMPAIGNS ==========
-  app.get("/api/admin/campaigns", requireAdmin as any, async (_req, res) => {
+  app.get("/api/admin/campaigns", requireAdmin, async (_req, res) => {
     try {
       const campaigns = await storage.getCampaignStats();
       res.json(campaigns);
@@ -1842,7 +1852,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // ========== COURSE PATHWAYS ==========
-  app.get("/api/admin/pathways", requireAdmin as any, async (_req, res) => {
+  app.get("/api/admin/pathways", requireAdmin, async (_req, res) => {
     try {
       const pathways = await storage.getPathways();
       // Attach step counts
@@ -1959,39 +1969,39 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // ========== ENHANCED ANALYTICS ENDPOINTS ==========
-  app.get("/api/admin/analytics/activity", analyticsRateLimiter, requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/analytics/activity", analyticsRateLimiter, requireAdmin, async (req, res) => {
     const feed = await storage.getActivityFeed(100);
     res.json(feed);
   });
 
-  app.get("/api/admin/analytics/overview", analyticsRateLimiter, requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/analytics/overview", analyticsRateLimiter, requireAdmin, async (req, res) => {
     const overview = await storage.getAnalyticsOverview();
     res.json(overview);
   });
 
-  app.get("/api/admin/analytics/courses/:id", analyticsRateLimiter, requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/analytics/courses/:id", analyticsRateLimiter, requireAdmin, async (req, res) => {
     const courseId = parseIdParam(req.params.id);
     if (!courseId) return res.status(400).json({ message: "Invalid ID" });
     const data = await storage.getCourseAnalyticsDeep(courseId);
     res.json(data);
   });
 
-  app.get("/api/admin/analytics/time-of-day", analyticsRateLimiter, requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/analytics/time-of-day", analyticsRateLimiter, requireAdmin, async (req, res) => {
     const data = await storage.getLearningTimeOfDay();
     res.json(data);
   });
 
-  app.get("/api/admin/analytics/devices", analyticsRateLimiter, requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/analytics/devices", analyticsRateLimiter, requireAdmin, async (req, res) => {
     const data = await storage.getDeviceBreakdown();
     res.json(data);
   });
 
-  app.get("/api/admin/analytics/funnel", analyticsRateLimiter, requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/analytics/funnel", analyticsRateLimiter, requireAdmin, async (req, res) => {
     const data = await storage.getCourseConversionFunnel();
     res.json(data);
   });
 
-  app.get("/api/admin/analytics/dropoff", analyticsRateLimiter, requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/analytics/dropoff", analyticsRateLimiter, requireAdmin, async (req, res) => {
     const data = await storage.getDropOffAnalysis();
     res.json(data);
   });
@@ -1999,14 +2009,14 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   // ========== EMAIL TEMPLATES ==========
 
   // Categories
-  app.get("/api/admin/email-categories", requireAdmin as any, async (_req, res) => {
+  app.get("/api/admin/email-categories", requireAdmin, async (_req, res) => {
     try {
       const cats = await storage.getEmailTemplateCategories();
       res.json(cats);
     } catch (e: any) { res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message }); }
   });
 
-  app.post("/api/admin/email-categories", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/email-categories", requireAdmin, async (req, res) => {
     try {
       const { name, color, description } = req.body;
       if (!name || typeof name !== "string") return res.status(400).json({ message: "Name is required" });
@@ -2016,7 +2026,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     } catch (e: any) { res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message }); }
   });
 
-  app.patch("/api/admin/email-categories/:id", requireAdmin as any, async (req, res) => {
+  app.patch("/api/admin/email-categories/:id", requireAdmin, async (req, res) => {
     try {
       const id = parseIdParam(req.params.id);
       if (id === null) return res.status(400).json({ message: "Invalid ID" });
@@ -2025,7 +2035,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     } catch (e: any) { res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message }); }
   });
 
-  app.delete("/api/admin/email-categories/:id", requireAdmin as any, async (req, res) => {
+  app.delete("/api/admin/email-categories/:id", requireAdmin, async (req, res) => {
     try {
       const id = parseIdParam(req.params.id);
       if (id === null) return res.status(400).json({ message: "Invalid ID" });
@@ -2035,7 +2045,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // Templates
-  app.get("/api/admin/email-templates", requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/email-templates", requireAdmin, async (req, res) => {
     try {
       const categoryId = req.query.categoryId ? parseIdParam(String(req.query.categoryId)) : undefined;
       const templates = await storage.getEmailTemplates(categoryId ?? undefined);
@@ -2043,7 +2053,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     } catch (e: any) { res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message }); }
   });
 
-  app.get("/api/admin/email-templates/:id", requireAdmin as any, async (req, res) => {
+  app.get("/api/admin/email-templates/:id", requireAdmin, async (req, res) => {
     try {
       const id = parseIdParam(req.params.id);
       if (id === null) return res.status(400).json({ message: "Invalid ID" });
@@ -2053,7 +2063,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     } catch (e: any) { res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message }); }
   });
 
-  app.post("/api/admin/email-templates", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/email-templates", requireAdmin, async (req, res) => {
     try {
       const { name, subject, previewText, categoryId, isSystem } = req.body;
       if (!name || typeof name !== "string") return res.status(400).json({ message: "Name is required" });
@@ -2062,7 +2072,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     } catch (e: any) { res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message }); }
   });
 
-  app.patch("/api/admin/email-templates/:id", requireAdmin as any, async (req, res) => {
+  app.patch("/api/admin/email-templates/:id", requireAdmin, async (req, res) => {
     try {
       const id = parseIdParam(req.params.id);
       if (id === null) return res.status(400).json({ message: "Invalid ID" });
@@ -2071,7 +2081,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     } catch (e: any) { res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message }); }
   });
 
-  app.delete("/api/admin/email-templates/:id", requireAdmin as any, async (req, res) => {
+  app.delete("/api/admin/email-templates/:id", requireAdmin, async (req, res) => {
     try {
       const id = parseIdParam(req.params.id);
       if (id === null) return res.status(400).json({ message: "Invalid ID" });
@@ -2083,7 +2093,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     } catch (e: any) { res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message }); }
   });
 
-  app.post("/api/admin/email-templates/:id/preview", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/email-templates/:id/preview", requireAdmin, async (req, res) => {
     try {
       const id = parseIdParam(req.params.id);
       if (id === null) return res.status(400).json({ message: "Invalid ID" });
@@ -2094,14 +2104,14 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
   });
 
   // Automations
-  app.get("/api/admin/email-automations", requireAdmin as any, async (_req, res) => {
+  app.get("/api/admin/email-automations", requireAdmin, async (_req, res) => {
     try {
       const automations = await storage.getEmailAutomations();
       res.json(automations);
     } catch (e: any) { res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message }); }
   });
 
-  app.post("/api/admin/email-automations", requireAdmin as any, async (req, res) => {
+  app.post("/api/admin/email-automations", requireAdmin, async (req, res) => {
     try {
       const { name, trigger, templateId, delayMinutes, description } = req.body;
       if (!name || !trigger) return res.status(400).json({ message: "Name and trigger are required" });
@@ -2110,7 +2120,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     } catch (e: any) { res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message }); }
   });
 
-  app.patch("/api/admin/email-automations/:id", requireAdmin as any, async (req, res) => {
+  app.patch("/api/admin/email-automations/:id", requireAdmin, async (req, res) => {
     try {
       const id = parseIdParam(req.params.id);
       if (id === null) return res.status(400).json({ message: "Invalid ID" });
@@ -2119,7 +2129,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     } catch (e: any) { res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message }); }
   });
 
-  app.delete("/api/admin/email-automations/:id", requireAdmin as any, async (req, res) => {
+  app.delete("/api/admin/email-automations/:id", requireAdmin, async (req, res) => {
     try {
       const id = parseIdParam(req.params.id);
       if (id === null) return res.status(400).json({ message: "Invalid ID" });

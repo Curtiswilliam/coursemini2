@@ -29,12 +29,7 @@ export async function sendEmail(opts: SendEmailOptions): Promise<void> {
   const recipients = Array.isArray(opts.to) ? opts.to : [opts.to];
 
   if (!auth) {
-    // Dev fallback — print to console
-    for (const r of recipients) {
-      console.log(`📧 [DEV EMAIL] To: ${r.email} | Subject: ${opts.subject}`);
-    }
-    console.log(opts.html.replace(/<[^>]+>/g, "").trim());
-    return;
+    throw new Error("Email not configured: set CLICKSEND_USERNAME and CLICKSEND_API_KEY environment variables.");
   }
 
   const emailAddressId = process.env.CLICKSEND_FROM_EMAIL_ID

@@ -24,6 +24,9 @@ if (!process.env.DATABASE_URL.startsWith("postgres://") && !process.env.DATABASE
 const app = express();
 const httpServer = createServer(app);
 
+// Trust nginx reverse proxy — required for secure cookies and correct req.ip
+app.set("trust proxy", 1);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;

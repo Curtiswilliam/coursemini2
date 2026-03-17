@@ -69,9 +69,6 @@ export default function ForgotPasswordPage() {
                 <p className="text-muted-foreground text-sm">
                   If an account exists for that email, we've sent a password reset link. It expires in 1 hour.
                 </p>
-                <p className="text-xs text-muted-foreground bg-muted rounded p-2">
-                  During development the reset link is printed to the server console.
-                </p>
                 <Link href="/auth">
                   <Button variant="outline" className="mt-2">
                     <ArrowLeft className="h-4 w-4 mr-2" /> Back to login
