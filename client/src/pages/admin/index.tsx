@@ -18,6 +18,7 @@ import {
   PieChart,
   Copy,
   Pencil,
+  Archive,
   MoreHorizontal,
 } from "lucide-react";
 import {
@@ -32,6 +33,7 @@ export default function AdminDashboard() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [duplicating, setDuplicating] = useState<number | null>(null);
+  const [archiving, setArchiving] = useState<number | null>(null);
 
   const { data: stats, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/stats"],
@@ -53,6 +55,19 @@ export default function AdminDashboard() {
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
     onSettled: () => setDuplicating(null),
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async ({ courseId, archive }: { courseId: number; archive: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/admin/courses/${courseId}/archive`, { archive });
+      return res.json();
+    },
+    onSuccess: (_, { archive }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/courses"] });
+      toast({ title: archive ? "Course archived" : "Course unarchived" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSettled: () => setArchiving(null),
   });
 
   if (isLoading) {
@@ -261,6 +276,17 @@ export default function AdminDashboard() {
                         >
                           <Copy className="h-4 w-4 mr-2" />
                           {duplicating === course.id ? "Duplicating…" : "Duplicate"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={archiving === course.id}
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => {
+                            setArchiving(course.id);
+                            archiveMutation.mutate({ courseId: course.id, archive: true });
+                          }}
+                        >
+                          <Archive className="h-4 w-4 mr-2" />
+                          {archiving === course.id ? "Archiving…" : "Archive"}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>

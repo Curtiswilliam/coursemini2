@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
-  GraduationCap, Loader2, Mail, Phone, User, MapPin, Calendar, CheckCircle2, ArrowLeft,
+  GraduationCap, Loader2, Mail, User, CheckCircle2,
 } from "lucide-react";
 
 // ─── Login ────────────────────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ function LoginForm() {
 
 // ─── Registration Wizard ───────────────────────────────────────────────────────
 
-type RegStep = "credentials" | "verify-email" | "phone" | "verify-phone" | "profile" | "done";
+type RegStep = "credentials" | "verify-email" | "profile" | "done";
 
 const credentialsSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -118,8 +118,8 @@ const credentialsSchema = z.object({
 });
 
 const emailCodeSchema = z.object({ code: z.string().length(6, "Must be 6 digits") });
-const phoneSchema = z.object({ phone: z.string().min(7, "Enter a valid phone number") });
-const phoneCodeSchema = z.object({ code: z.string().length(6, "Must be 6 digits") });
+// const phoneSchema = z.object({ phone: z.string().min(7, "Enter a valid phone number") });
+// const phoneCodeSchema = z.object({ code: z.string().length(6, "Must be 6 digits") });
 const profileSchema = z.object({
   name: z.string().min(2, "Full name must be at least 2 characters"),
   country: z.string().min(2, "Country is required"),
@@ -130,8 +130,8 @@ const profileSchema = z.object({
 const STEPS: { step: RegStep; label: string; icon: React.ReactNode }[] = [
   { step: "credentials", label: "Account", icon: <Mail className="h-3.5 w-3.5" /> },
   { step: "verify-email", label: "Email", icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
-  { step: "phone", label: "Phone", icon: <Phone className="h-3.5 w-3.5" /> },
-  { step: "verify-phone", label: "Verify", icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+  // { step: "phone", label: "Phone", icon: <Phone className="h-3.5 w-3.5" /> },
+  // { step: "verify-phone", label: "Verify", icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
   { step: "profile", label: "Profile", icon: <User className="h-3.5 w-3.5" /> },
 ];
 
@@ -156,7 +156,7 @@ function RegisterWizard() {
   const { toast } = useToast();
   const [step, setStep] = useState<RegStep>("credentials");
   const [isLoading, setIsLoading] = useState(false);
-  const [phone, setPhoneState] = useState("");
+  // const [phone, setPhoneState] = useState("");
 
   const credForm = useForm<z.infer<typeof credentialsSchema>>({
     resolver: zodResolver(credentialsSchema),
@@ -166,14 +166,14 @@ function RegisterWizard() {
     resolver: zodResolver(emailCodeSchema),
     defaultValues: { code: "" },
   });
-  const phoneForm = useForm<z.infer<typeof phoneSchema>>({
-    resolver: zodResolver(phoneSchema),
-    defaultValues: { phone: "" },
-  });
-  const phoneCodeForm = useForm<z.infer<typeof phoneCodeSchema>>({
-    resolver: zodResolver(phoneCodeSchema),
-    defaultValues: { code: "" },
-  });
+  // const phoneForm = useForm<z.infer<typeof phoneSchema>>({
+  //   resolver: zodResolver(phoneSchema),
+  //   defaultValues: { phone: "" },
+  // });
+  // const phoneCodeForm = useForm<z.infer<typeof phoneCodeSchema>>({
+  //   resolver: zodResolver(phoneCodeSchema),
+  //   defaultValues: { code: "" },
+  // });
   const profileForm = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
     defaultValues: { name: "", country: "", stateRegion: "", dateOfBirth: "" },
@@ -197,7 +197,7 @@ function RegisterWizard() {
     try {
       await apiRequest("POST", "/api/auth/verify-email", { code: values.code });
       toast({ title: "Email verified!" });
-      setStep("phone");
+      setStep("profile");
     } catch (e: any) {
       toast({ title: "Verification failed", description: e.message, variant: "destructive" });
     } finally {
@@ -214,41 +214,9 @@ function RegisterWizard() {
     }
   }
 
-  async function onPhone(values: z.infer<typeof phoneSchema>) {
-    setIsLoading(true);
-    try {
-      await apiRequest("POST", "/api/auth/send-phone-code", { phone: values.phone });
-      setPhoneState(values.phone);
-      toast({ title: "Code sent", description: "Check your phone (or server console)." });
-      setStep("verify-phone");
-    } catch (e: any) {
-      toast({ title: "Failed", description: e.message, variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function onVerifyPhone(values: z.infer<typeof phoneCodeSchema>) {
-    setIsLoading(true);
-    try {
-      await apiRequest("POST", "/api/auth/verify-phone", { code: values.code });
-      toast({ title: "Phone verified!" });
-      setStep("profile");
-    } catch (e: any) {
-      toast({ title: "Verification failed", description: e.message, variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function onResendPhone() {
-    try {
-      await apiRequest("POST", "/api/auth/send-phone-code", { phone });
-      toast({ title: "Code resent", description: "Check your phone or server console." });
-    } catch (e: any) {
-      toast({ title: "Failed to resend", description: e.message, variant: "destructive" });
-    }
-  }
+  // async function onPhone(values: z.infer<typeof phoneSchema>) { ... }
+  // async function onVerifyPhone(values: z.infer<typeof phoneCodeSchema>) { ... }
+  // async function onResendPhone() { ... }
 
   async function onProfile(values: z.infer<typeof profileSchema>) {
     setIsLoading(true);
@@ -279,18 +247,6 @@ function RegisterWizard() {
           <>
             <CardTitle>Verify your email</CardTitle>
             <CardDescription>Enter the 6-digit code sent to your email address</CardDescription>
-          </>
-        )}
-        {step === "phone" && (
-          <>
-            <CardTitle>Add your phone number</CardTitle>
-            <CardDescription>We'll send a verification code via SMS</CardDescription>
-          </>
-        )}
-        {step === "verify-phone" && (
-          <>
-            <CardTitle>Verify your phone</CardTitle>
-            <CardDescription>Enter the 6-digit code sent to {phone}</CardDescription>
           </>
         )}
         {step === "profile" && (
@@ -369,66 +325,7 @@ function RegisterWizard() {
           </Form>
         )}
 
-        {step === "phone" && (
-          <Form {...phoneForm}>
-            <form onSubmit={phoneForm.handleSubmit(onPhone)} className="space-y-4">
-              <div className="flex items-center justify-center py-2">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Phone className="h-6 w-6 text-primary" />
-                </div>
-              </div>
-              <FormField control={phoneForm.control} name="phone" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Mobile number</FormLabel>
-                  <FormControl>
-                    <Input placeholder="+1 555 000 0000" type="tel" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Send Code
-              </Button>
-            </form>
-          </Form>
-        )}
-
-        {step === "verify-phone" && (
-          <Form {...phoneCodeForm}>
-            <form onSubmit={phoneCodeForm.handleSubmit(onVerifyPhone)} className="space-y-4">
-              <div className="flex items-center justify-center py-2">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Phone className="h-6 w-6 text-primary" />
-                </div>
-              </div>
-              <FormField control={phoneCodeForm.control} name="code" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>6-digit SMS code</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="000000"
-                      maxLength={6}
-                      className="text-center text-2xl tracking-widest font-mono h-14"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Verify Phone
-              </Button>
-              <p className="text-center text-sm text-muted-foreground">
-                Didn't get it?{" "}
-                <button type="button" onClick={onResendPhone} className="text-primary underline">
-                  Resend code
-                </button>
-              </p>
-            </form>
-          </Form>
-        )}
+        {/* Phone verification steps commented out — re-enable when SMS provider is integrated */}
 
         {step === "profile" && (
           <Form {...profileForm}>

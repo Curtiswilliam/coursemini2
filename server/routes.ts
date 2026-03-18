@@ -240,52 +240,11 @@ export async function registerRoutes(
     }
   });
 
-  // Step 3: Send phone verification code
-  app.post("/api/auth/send-phone-code", requireAuth, async (req, res) => {
-    try {
-      const { phone } = req.body;
-      if (!phone || typeof phone !== "string" || phone.trim().length < 7) {
-        return res.status(400).json({ message: "A valid phone number is required" });
-      }
-      const code = (100000 + (crypto.randomInt(900000))).toString();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-      await storage.createPhoneVerification(req.session.userId!, phone.trim(), code, expiresAt);
-      // TODO: integrate SMS provider (e.g. ClickSend SMS) to send code to phone.trim()
-      res.json({ ok: true });
-    } catch (e: any) {
-      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
-    }
-  });
+  // Phone verification routes commented out — re-enable when SMS provider is integrated
+  // app.post("/api/auth/send-phone-code", ...)
+  // app.post("/api/auth/verify-phone", ...)
 
-  // Step 4: Verify phone code
-  app.post("/api/auth/verify-phone", requireAuth, async (req, res) => {
-    try {
-      const { code } = req.body;
-      if (!code || typeof code !== "string") {
-        return res.status(400).json({ message: "Verification code is required" });
-      }
-      const verification = await storage.getLatestPhoneVerification(req.session.userId!);
-      if (!verification) {
-        return res.status(400).json({ message: "No phone verification found. Please request a code." });
-      }
-      if (verification.usedAt) {
-        return res.status(400).json({ message: "This code has already been used." });
-      }
-      if (new Date() > verification.expiresAt) {
-        return res.status(400).json({ message: "Code has expired. Please request a new one." });
-      }
-      if (verification.code !== code.trim()) {
-        return res.status(400).json({ message: "Incorrect verification code." });
-      }
-      await storage.markPhoneVerificationUsed(verification.id);
-      await storage.updateUser(req.session.userId!, { phone: verification.phone, phoneVerified: true } as any);
-      res.json({ ok: true, step: "profile" });
-    } catch (e: any) {
-      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
-    }
-  });
-
-  // Step 5: Complete profile
+  // Step 4 (now Step 3): Complete profile
   app.post("/api/auth/complete-profile", requireAuth, async (req, res) => {
     try {
       const { name, country, stateRegion, dateOfBirth } = req.body;
@@ -1155,6 +1114,25 @@ export async function registerRoutes(
       }
 
       res.json({ id: newCourse.id, title: newCourse.title });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  // ─── Archive / unarchive course ───────────────────────────────────────────────
+  app.patch("/api/admin/courses/:id/archive", requireAdmin, async (req, res) => {
+    try {
+      const courseId = parseIdParam(req.params.id);
+      if (courseId === null) return res.status(400).json({ message: "Invalid ID" });
+      const user = req.currentUser!;
+      const course = await storage.getCourseById(courseId);
+      if (!course) return res.status(404).json({ message: "Course not found" });
+      if (course.instructorId !== user.id && user.role !== "ADMIN") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const archive = req.body.archive !== false; // default true
+      const updated = await storage.updateCourse(courseId, { archivedAt: archive ? new Date() : null } as any);
+      res.json(updated);
     } catch (e: any) {
       res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
     }

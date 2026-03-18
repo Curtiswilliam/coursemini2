@@ -96,6 +96,7 @@ export const courses = pgTable("courses", {
   learningOutcomes: text("learning_outcomes"),
   prerequisites: text("prerequisites"),
   isFree: boolean("is_free").default(true),
+  archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

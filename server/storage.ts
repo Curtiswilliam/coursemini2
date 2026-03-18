@@ -342,7 +342,11 @@ export class DatabaseStorage implements IStorage {
     const allCourses = await db
       .select()
       .from(courses)
-      .where(filters?.allStatuses ? undefined : eq(courses.status, "PUBLISHED"))
+      .where(
+        filters?.allStatuses
+          ? isNull(courses.archivedAt)
+          : and(eq(courses.status, "PUBLISHED"), isNull(courses.archivedAt))
+      )
       .orderBy(desc(courses.createdAt));
 
     const enriched = await Promise.all(
@@ -482,7 +486,7 @@ export class DatabaseStorage implements IStorage {
     const instructorCourses = await db
       .select()
       .from(courses)
-      .where(eq(courses.instructorId, instructorId))
+      .where(and(eq(courses.instructorId, instructorId), isNull(courses.archivedAt)))
       .orderBy(desc(courses.updatedAt));
 
     return Promise.all(
