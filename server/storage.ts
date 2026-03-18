@@ -62,12 +62,12 @@ export interface IStorage {
   getCategories(): Promise<Category[]>;
   createCategory(category: InsertCategory): Promise<Category>;
 
-  getCourses(filters?: { search?: string; category?: string; level?: string; sort?: string; featured?: boolean; limit?: number; allStatuses?: boolean }): Promise<any[]>;
+  getCourses(filters?: { search?: string; category?: string; level?: string; sort?: string; featured?: boolean; limit?: number; allStatuses?: boolean; includeArchived?: boolean }): Promise<any[]>;
   getCourseBySlug(slug: string): Promise<any | undefined>;
   getCourseById(id: number): Promise<any | undefined>;
   createCourse(course: InsertCourse): Promise<Course>;
   updateCourse(id: number, data: Partial<InsertCourse>): Promise<Course | undefined>;
-  getCoursesByInstructor(instructorId: number): Promise<any[]>;
+  getCoursesByInstructor(instructorId: number, includeArchived?: boolean): Promise<any[]>;
 
   getSubjectsByCourse(courseId: number): Promise<Subject[]>;
   createSubject(subject: InsertSubject): Promise<Subject>;
@@ -338,14 +338,16 @@ export class DatabaseStorage implements IStorage {
     return total;
   }
 
-  async getCourses(filters?: { search?: string; category?: string; level?: string; sort?: string; featured?: boolean; limit?: number; allStatuses?: boolean }): Promise<any[]> {
+  async getCourses(filters?: { search?: string; category?: string; level?: string; sort?: string; featured?: boolean; limit?: number; allStatuses?: boolean; includeArchived?: boolean }): Promise<any[]> {
     const allCourses = await db
       .select()
       .from(courses)
       .where(
-        filters?.allStatuses
-          ? isNull(courses.archivedAt)
-          : and(eq(courses.status, "PUBLISHED"), isNull(courses.archivedAt))
+        filters?.includeArchived
+          ? undefined
+          : filters?.allStatuses
+            ? isNull(courses.archivedAt)
+            : and(eq(courses.status, "PUBLISHED"), isNull(courses.archivedAt))
       )
       .orderBy(desc(courses.createdAt));
 
@@ -482,11 +484,11 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getCoursesByInstructor(instructorId: number): Promise<any[]> {
+  async getCoursesByInstructor(instructorId: number, includeArchived = false): Promise<any[]> {
     const instructorCourses = await db
       .select()
       .from(courses)
-      .where(and(eq(courses.instructorId, instructorId), isNull(courses.archivedAt)))
+      .where(includeArchived ? eq(courses.instructorId, instructorId) : and(eq(courses.instructorId, instructorId), isNull(courses.archivedAt)))
       .orderBy(desc(courses.updatedAt));
 
     return Promise.all(

@@ -991,9 +991,10 @@ export async function registerRoutes(
   // ========== ADMIN COURSES ==========
   app.get("/api/admin/courses", requireAdmin, async (req, res) => {
     const user = req.currentUser!;
+    const includeArchived = req.query.includeArchived === "1";
     const instructorCourses = user.role === "ADMIN"
-      ? await storage.getCourses({ allStatuses: true })
-      : await storage.getCoursesByInstructor(user.id);
+      ? await storage.getCourses({ allStatuses: true, includeArchived })
+      : await storage.getCoursesByInstructor(user.id, includeArchived);
     res.json(instructorCourses);
   });
 

@@ -19,6 +19,7 @@ import CoursePlayer from "@/pages/course-player";
 import BundlesPage from "@/pages/bundles";
 import CertificatePage from "@/pages/certificate";
 import AdminDashboard from "@/pages/admin/index";
+import AdminCourses from "@/pages/admin/courses";
 import CourseStudio from "@/components/course-studio";
 import AdminStudents from "@/pages/admin/students";
 import AdminSetup from "@/pages/admin/setup";
@@ -62,7 +63,7 @@ function AdminRouter() {
           <AdminLayout>
             <Switch>
               <Route path="/admin" component={AdminDashboard} />
-              <Route path="/admin/courses" component={AdminDashboard} />
+              <Route path="/admin/courses" component={AdminCourses} />
               <Route path="/admin/setup" component={AdminSetup} />
               <Route path="/admin/analytics" component={AdminAnalytics} />
               <Route path="/admin/students/:id" component={AdminStudentProfile} />
