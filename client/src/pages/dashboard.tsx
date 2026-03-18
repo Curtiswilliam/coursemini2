@@ -1,15 +1,23 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
-import { BookOpen, ArrowRight, GraduationCap, Trophy, Award, ExternalLink, Lock, Star, GitBranch } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { BookOpen, ArrowRight, GraduationCap, Trophy, Award, ExternalLink, Lock, Star, GitBranch, Bookmark, Flame, Target, Pencil, Check } from "lucide-react";
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalInput, setGoalInput] = useState("");
+
   const { data: enrollments, isLoading } = useQuery<any[]>({
     queryKey: ["/api/enrollments"],
   });
@@ -28,21 +36,48 @@ export default function Dashboard() {
     queryKey: ["/api/badges/definitions"],
   });
 
-  const { data: allCourses } = useQuery<any[]>({
-    queryKey: ["/api/courses"],
-    enabled: !!user,
-  });
-
   const { data: myPathways } = useQuery<any[]>({
     queryKey: ["/api/my/pathways"],
     enabled: !!user,
   });
 
+  const { data: dashStats } = useQuery<any>({
+    queryKey: ["/api/dashboard/stats"],
+    enabled: !!user,
+  });
+
+  const { data: bookmarks } = useQuery<any[]>({
+    queryKey: ["/api/bookmarks"],
+    enabled: !!user,
+  });
+
+  const updateGoalMutation = useMutation({
+    mutationFn: async (weeklyGoal: number) => {
+      await apiRequest("PATCH", "/api/auth/weekly-goal", { weeklyGoal });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      setEditingGoal(false);
+      toast({ title: "Weekly goal updated!" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const handleGoalSave = () => {
+    const val = parseInt(goalInput);
+    if (isNaN(val) || val < 1 || val > 50) {
+      toast({ title: "Enter a number between 1 and 50", variant: "destructive" });
+      return;
+    }
+    updateGoalMutation.mutate(val);
+  };
+
   const activeEnrollments = enrollments?.filter((e: any) => e.status === "ACTIVE") || [];
   const completedEnrollments = enrollments?.filter((e: any) => e.status === "COMPLETED") || [];
 
   const enrolledCourseIds = new Set(enrollments?.map((e: any) => e.courseId) || []);
-  const suggestedCourses = allCourses?.filter((c: any) => !enrolledCourseIds.has(c.id)).slice(0, 6) || [];
+  const suggestedCourses = dashStats?.recommendedCourses || [];
 
   if (isLoading) {
     return (
@@ -124,6 +159,68 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Your Progress Widget */}
+        {dashStats && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Target className="h-4 w-4 text-primary" />
+                Your Progress
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-md bg-orange-500/10 flex items-center justify-center shrink-0">
+                  <Flame className="h-5 w-5 text-orange-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{dashStats.currentStreak}</p>
+                  <p className="text-sm text-muted-foreground">day streak</p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    {dashStats.weeklyLessonsCompleted} of {dashStats.weeklyGoal} lessons this week
+                  </span>
+                  {editingGoal ? (
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={50}
+                        defaultValue={dashStats.weeklyGoal}
+                        onChange={(e) => setGoalInput(e.target.value)}
+                        className="h-6 w-16 text-xs px-1"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleGoalSave();
+                          if (e.key === "Escape") setEditingGoal(false);
+                        }}
+                        autoFocus
+                      />
+                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleGoalSave}>
+                        <Check className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setEditingGoal(true); setGoalInput(String(dashStats.weeklyGoal)); }}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <Pencil className="h-3 w-3" /> Edit goal
+                    </button>
+                  )}
+                </div>
+                <Progress
+                  value={dashStats.weeklyGoal > 0 ? Math.min(100, (dashStats.weeklyLessonsCompleted / dashStats.weeklyGoal) * 100) : 0}
+                  className="h-2"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {activeEnrollments.length > 0 && (
           <div>
@@ -253,6 +350,28 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Bookmarks */}
+        {bookmarks && bookmarks.length > 0 && (
+          <div>
+            <h2 className="text-xl font-bold mb-4">Bookmarked Lessons</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {bookmarks.slice(0, 6).map((bm: any) => (
+                <Card key={bm.id}>
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-md bg-blue-500/10 flex items-center justify-center shrink-0">
+                      <Bookmark className="h-5 w-5 text-blue-500 fill-blue-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{bm.lesson?.title}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{bm.lesson?.type?.toLowerCase()}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Badges Section */}
         {badgeDefinitions && badgeDefinitions.length > 0 && (
           <div>
@@ -292,12 +411,11 @@ export default function Dashboard() {
           </div>
         )}
 
-
-        {/* Courses You May Like */}
+        {/* Recommended For You */}
         {suggestedCourses.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">Courses You May Like</h2>
+              <h2 className="text-xl font-bold">Recommended For You</h2>
               <Link href="/courses">
                 <Button variant="ghost" size="sm" className="text-muted-foreground">
                   Browse all <ArrowRight className="ml-1 h-3 w-3" />

@@ -48,6 +48,7 @@ export const users = pgTable("users", {
   birthYear: integer("birth_year"),
   interests: jsonb("interests"),
   intakeCompletedAt: timestamp("intake_completed_at"),
+  weeklyGoalLessons: integer("weekly_goal_lessons").default(5),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -103,6 +104,14 @@ export const courses = pgTable("courses", {
   prerequisites: text("prerequisites"),
   isFree: boolean("is_free").default(true),
   archivedAt: timestamp("archived_at"),
+  waitlistEnabled: boolean("waitlist_enabled").default(false),
+  salesHeadline: text("sales_headline"),
+  salesSubheadline: text("sales_subheadline"),
+  salesVideoUrl: text("sales_video_url"),
+  salesTestimonials: jsonb("sales_testimonials"),
+  salesFaq: jsonb("sales_faq"),
+  salesFeatures: jsonb("sales_features"),
+  landingPageEnabled: boolean("landing_page_enabled").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -420,6 +429,61 @@ export const blockTypeEnum = pgEnum("block_type", [
   "CALLOUT", "TIMELINE", "CODE", "FILE"
 ]);
 
+export const lessonNotes = pgTable("lesson_notes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  lessonId: integer("lesson_id").references(() => lessons.id, { onDelete: "cascade" }).notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const lessonBookmarks = pgTable("lesson_bookmarks", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  lessonId: integer("lesson_id").references(() => lessons.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const courseWaitlist = pgTable("course_waitlist", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  courseId: integer("course_id").references(() => courses.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const dripEmails = pgTable("drip_emails", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  courseId: integer("course_id").references(() => courses.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  scheduledAt: timestamp("scheduled_at").notNull(),
+  sentAt: timestamp("sent_at"),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const webhooks = pgTable("webhooks", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  events: jsonb("events").notNull().default([]),
+  secret: text("secret"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const webhookDeliveries = pgTable("webhook_deliveries", {
+  id: serial("id").primaryKey(),
+  webhookId: integer("webhook_id").references(() => webhooks.id, { onDelete: "cascade" }).notNull(),
+  event: text("event").notNull(),
+  payload: jsonb("payload"),
+  status: text("status").notNull().default("pending"),
+  responseCode: integer("response_code"),
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const lessonBlocks = pgTable("lesson_blocks", {
   id: serial("id").primaryKey(),
   lessonId: integer("lesson_id").references(() => lessons.id, { onDelete: "cascade" }).notNull(),
@@ -463,6 +527,12 @@ export const insertCoursePathwaySchema = createInsertSchema(coursePathways).omit
 export const insertPathwayStepSchema = createInsertSchema(pathwaySteps).omit({ id: true });
 export const insertUserPathwayProgressSchema = createInsertSchema(userPathwayProgress).omit({ id: true });
 export const insertUserBadgeSchema = createInsertSchema(userBadges).omit({ id: true, awardedAt: true });
+export const insertLessonNoteSchema = createInsertSchema(lessonNotes).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertLessonBookmarkSchema = createInsertSchema(lessonBookmarks).omit({ id: true, createdAt: true });
+export const insertCourseWaitlistSchema = createInsertSchema(courseWaitlist).omit({ id: true, createdAt: true });
+export const insertDripEmailSchema = createInsertSchema(dripEmails).omit({ id: true, createdAt: true });
+export const insertWebhookSchema = createInsertSchema(webhooks).omit({ id: true, createdAt: true });
+export const insertWebhookDeliverySchema = createInsertSchema(webhookDeliveries).omit({ id: true, createdAt: true });
 
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -521,3 +591,16 @@ export type InsertUserBadge = z.infer<typeof insertUserBadgeSchema>;
 export type EmailTemplateCategory = typeof emailTemplateCategories.$inferSelect;
 export type EmailTemplate = typeof emailTemplates.$inferSelect;
 export type EmailAutomation = typeof emailAutomations.$inferSelect;
+
+export type LessonNote = typeof lessonNotes.$inferSelect;
+export type InsertLessonNote = z.infer<typeof insertLessonNoteSchema>;
+export type LessonBookmark = typeof lessonBookmarks.$inferSelect;
+export type InsertLessonBookmark = z.infer<typeof insertLessonBookmarkSchema>;
+export type CourseWaitlist = typeof courseWaitlist.$inferSelect;
+export type InsertCourseWaitlist = z.infer<typeof insertCourseWaitlistSchema>;
+export type DripEmail = typeof dripEmails.$inferSelect;
+export type InsertDripEmail = z.infer<typeof insertDripEmailSchema>;
+export type Webhook = typeof webhooks.$inferSelect;
+export type InsertWebhook = z.infer<typeof insertWebhookSchema>;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type InsertWebhookDelivery = z.infer<typeof insertWebhookDeliverySchema>;

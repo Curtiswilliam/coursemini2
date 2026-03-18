@@ -28,6 +28,14 @@ const courseSchema = z.object({
   learningOutcomes: z.string().optional(),
   prerequisites: z.string().optional(),
   status: z.string().optional(),
+  waitlistEnabled: z.boolean().optional(),
+  landingPageEnabled: z.boolean().optional(),
+  salesHeadline: z.string().optional(),
+  salesSubheadline: z.string().optional(),
+  salesVideoUrl: z.string().optional(),
+  salesFeatures: z.string().optional(), // newline-separated
+  salesTestimonialsRaw: z.string().optional(), // JSON
+  salesFaqRaw: z.string().optional(), // JSON
 });
 
 type CourseFormValues = z.infer<typeof courseSchema>;
@@ -43,6 +51,8 @@ export function CourseDetailsPanel({ course, onSave, onSaveStatusChange }: Cours
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+
+  const c = course as any;
 
   const form = useForm<CourseFormValues>({
     resolver: zodResolver(courseSchema),
@@ -60,6 +70,14 @@ export function CourseDetailsPanel({ course, onSave, onSaveStatusChange }: Cours
       learningOutcomes: course.learningOutcomes || "",
       prerequisites: course.prerequisites || "",
       status: course.status || "DRAFT",
+      waitlistEnabled: c.waitlistEnabled ?? false,
+      landingPageEnabled: c.landingPageEnabled ?? false,
+      salesHeadline: c.salesHeadline || "",
+      salesSubheadline: c.salesSubheadline || "",
+      salesVideoUrl: c.salesVideoUrl || "",
+      salesFeatures: Array.isArray(c.salesFeatures) ? (c.salesFeatures as string[]).join("\n") : "",
+      salesTestimonialsRaw: c.salesTestimonials ? JSON.stringify(c.salesTestimonials, null, 2) : "[]",
+      salesFaqRaw: c.salesFaq ? JSON.stringify(c.salesFaq, null, 2) : "[]",
     },
   });
 
@@ -78,6 +96,14 @@ export function CourseDetailsPanel({ course, onSave, onSaveStatusChange }: Cours
       learningOutcomes: course.learningOutcomes || "",
       prerequisites: course.prerequisites || "",
       status: course.status || "DRAFT",
+      waitlistEnabled: (course as any).waitlistEnabled ?? false,
+      landingPageEnabled: (course as any).landingPageEnabled ?? false,
+      salesHeadline: (course as any).salesHeadline || "",
+      salesSubheadline: (course as any).salesSubheadline || "",
+      salesVideoUrl: (course as any).salesVideoUrl || "",
+      salesFeatures: Array.isArray((course as any).salesFeatures) ? ((course as any).salesFeatures as string[]).join("\n") : "",
+      salesTestimonialsRaw: (course as any).salesTestimonials ? JSON.stringify((course as any).salesTestimonials, null, 2) : "[]",
+      salesFaqRaw: (course as any).salesFaq ? JSON.stringify((course as any).salesFaq, null, 2) : "[]",
     });
   }, [course.id]);
 
@@ -89,7 +115,20 @@ export function CourseDetailsPanel({ course, onSave, onSaveStatusChange }: Cours
     async () => {
       const values = form.getValues();
       const isValid = await form.trigger();
-      if (isValid) await onSave(values);
+      if (!isValid) return;
+      // Transform the special fields before saving
+      const { salesFeatures, salesTestimonialsRaw, salesFaqRaw, ...rest } = values as any;
+      const saveData: any = { ...rest };
+      if (salesFeatures !== undefined) {
+        saveData.salesFeatures = (salesFeatures as string).split("\n").filter((s: string) => s.trim());
+      }
+      try {
+        saveData.salesTestimonials = JSON.parse(salesTestimonialsRaw || "[]");
+      } catch { saveData.salesTestimonials = []; }
+      try {
+        saveData.salesFaq = JSON.parse(salesFaqRaw || "[]");
+      } catch { saveData.salesFaq = []; }
+      await onSave(saveData);
     },
     { enabled: true }
   );
@@ -420,6 +459,142 @@ export function CourseDetailsPanel({ course, onSave, onSaveStatusChange }: Cours
                   )}
                 />
               )}
+            </section>
+
+            {/* Waitlist */}
+            <section className="space-y-4">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Waitlist
+              </h2>
+              <FormField
+                control={form.control}
+                name="waitlistEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                    <div>
+                      <FormLabel className="text-sm font-medium">Enable Waitlist</FormLabel>
+                      <p className="text-xs text-muted-foreground mt-0.5">Show waitlist button on course page</p>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </section>
+
+            {/* Landing Page */}
+            <section className="space-y-4">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Landing Page
+              </h2>
+              <FormField
+                control={form.control}
+                name="landingPageEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                    <div>
+                      <FormLabel className="text-sm font-medium">Enable Landing Page</FormLabel>
+                      <p className="text-xs text-muted-foreground mt-0.5">Publish a sales landing page at /lp/{(course as any).slug}</p>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="salesHeadline"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sales Headline</FormLabel>
+                    <FormControl>
+                      <Input placeholder="The headline on your landing page" {...field} value={field.value || ""} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="salesSubheadline"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sales Subheadline</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Supporting text below the headline" {...field} value={field.value || ""} rows={2} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="salesVideoUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sales Video URL</FormLabel>
+                    <FormControl>
+                      <Input placeholder="YouTube or Vimeo embed URL" {...field} value={field.value || ""} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="salesFeatures"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Features / What You'll Learn</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="One feature per line"
+                        {...field}
+                        value={field.value || ""}
+                        rows={5}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">One feature per line</p>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="salesTestimonialsRaw"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Testimonials (JSON)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder='[{"name":"Jane","role":"Designer","text":"Great course!","rating":5}]'
+                        {...field}
+                        value={field.value || "[]"}
+                        rows={5}
+                        className="font-mono text-xs"
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">Array of {"{name, role, text, rating}"}</p>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="salesFaqRaw"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>FAQ (JSON)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder='[{"question":"How long?","answer":"8 hours of video"}]'
+                        {...field}
+                        value={field.value || "[]"}
+                        rows={5}
+                        className="font-mono text-xs"
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">Array of {"{question, answer}"}</p>
+                  </FormItem>
+                )}
+              />
             </section>
           </form>
         </Form>

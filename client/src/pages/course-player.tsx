@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +33,10 @@ import {
   Clock,
   HelpCircle,
   Trophy,
+  Bookmark,
+  BookmarkCheck,
+  StickyNote,
+  ChevronUp,
 } from "lucide-react";
 
 function getEmbedUrl(url: string): { type: "youtube" | "vimeo" | "direct"; embedUrl: string } | null {
@@ -302,6 +307,12 @@ export default function CoursePlayer() {
   const [quizResult, setQuizResult] = useState<any>(null);
   const [quizSubmitting, setQuizSubmitting] = useState(false);
 
+  // Notes & bookmarks state
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [noteContent, setNoteContent] = useState("");
+  const [noteSaveStatus, setNoteSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
+  const noteSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Progress tracking
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [readProgress, setReadProgress] = useState(0);
@@ -328,6 +339,58 @@ export default function CoursePlayer() {
       return res.json();
     },
     enabled: !!currentLessonId,
+  });
+
+  const { data: bookmarkData, refetch: refetchBookmark } = useQuery<any>({
+    queryKey: ["/api/lessons", currentLessonId, "bookmark"],
+    queryFn: async () => {
+      if (!currentLessonId || !enrollment) return null;
+      const res = await fetch(`/api/lessons/${currentLessonId}/note`, { credentials: "include" });
+      // Just check if bookmarked by fetching bookmark status via the bookmarks list
+      return null;
+    },
+    enabled: false, // will be handled manually
+  });
+
+  const { data: noteData, refetch: refetchNote } = useQuery<any>({
+    queryKey: ["/api/lessons", currentLessonId, "note"],
+    queryFn: async () => {
+      if (!currentLessonId) return null;
+      const res = await fetch(`/api/lessons/${currentLessonId}/note`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!currentLessonId && !!courseData?.enrollment,
+  });
+
+  const { data: userBookmarks, refetch: refetchBookmarks } = useQuery<any[]>({
+    queryKey: ["/api/bookmarks"],
+    enabled: !!courseData?.enrollment,
+  });
+
+  const isBookmarked = userBookmarks?.some((bm: any) => bm.lessonId === currentLessonId) ?? false;
+
+  const toggleBookmarkMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/lessons/${currentLessonId}/bookmark`);
+      return res;
+    },
+    onSuccess: () => {
+      refetchBookmarks();
+      queryClient.invalidateQueries({ queryKey: ["/api/bookmarks"] });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const saveNoteMutation = useMutation({
+    mutationFn: async (content: string) => {
+      await apiRequest("PUT", `/api/lessons/${currentLessonId}/note`, { content });
+    },
+    onSuccess: () => {
+      setNoteSaveStatus("saved");
+      queryClient.invalidateQueries({ queryKey: ["/api/lessons", currentLessonId, "note"] });
+    },
+    onError: () => setNoteSaveStatus("unsaved"),
   });
 
   const course = courseData?.course;
@@ -390,7 +453,38 @@ export default function CoursePlayer() {
   useEffect(() => {
     setQuizAnswers({});
     setQuizResult(null);
+    setNoteContent("");
+    setNoteSaveStatus("saved");
   }, [currentLessonId]);
+
+  // Load note content when noteData changes
+  useEffect(() => {
+    if (noteData?.content !== undefined) {
+      setNoteContent(noteData.content || "");
+    } else if (noteData === null) {
+      setNoteContent("");
+    }
+  }, [noteData]);
+
+  const handleNoteChange = (val: string) => {
+    setNoteContent(val);
+    setNoteSaveStatus("unsaved");
+    if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
+    noteSaveTimer.current = setTimeout(() => {
+      if (val.trim()) {
+        setNoteSaveStatus("saving");
+        saveNoteMutation.mutate(val);
+      }
+    }, 1500);
+  };
+
+  const handleNoteBlur = () => {
+    if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
+    if (noteContent.trim() && noteSaveStatus === "unsaved") {
+      setNoteSaveStatus("saving");
+      saveNoteMutation.mutate(noteContent);
+    }
+  };
 
   // Compute scroll depth — called on scroll events and also after lesson renders
   const handleContentScroll = useCallback(() => {
@@ -727,7 +821,24 @@ export default function CoursePlayer() {
                 <span className="text-xs text-muted-foreground">
                   {currentLesson.subjectTitle} › {currentLesson.moduleTitle}
                 </span>
-                <h1 className="text-2xl font-bold mt-1" data-testid="text-lesson-title">{currentLesson.title}</h1>
+                <div className="flex items-start justify-between gap-3 mt-1">
+                  <h1 className="text-2xl font-bold" data-testid="text-lesson-title">{currentLesson.title}</h1>
+                  {enrollment && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 mt-0.5"
+                      onClick={() => toggleBookmarkMutation.mutate()}
+                      title={isBookmarked ? "Remove bookmark" : "Bookmark this lesson"}
+                    >
+                      {isBookmarked ? (
+                        <BookmarkCheck className="h-5 w-5 text-primary fill-primary" />
+                      ) : (
+                        <Bookmark className="h-5 w-5" />
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Reading progress bar */}
@@ -862,6 +973,40 @@ export default function CoursePlayer() {
                     </div>
                   ) : null}
                 </>
+              )}
+
+              {/* Notes Panel */}
+              {enrollment && currentLessonAvailable && (
+                <div className="mt-8 border rounded-md overflow-hidden">
+                  <button
+                    className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+                    onClick={() => setNotesOpen(!notesOpen)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <StickyNote className="h-4 w-4 text-muted-foreground" />
+                      My Notes
+                      {noteContent && <Badge variant="secondary" className="text-xs h-4 px-1">Saved</Badge>}
+                    </span>
+                    {notesOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </button>
+                  {notesOpen && (
+                    <div className="px-4 pb-4 space-y-2 border-t">
+                      <Textarea
+                        className="mt-3 min-h-[120px] text-sm resize-none"
+                        placeholder="Write your notes for this lesson..."
+                        value={noteContent}
+                        onChange={(e) => handleNoteChange(e.target.value)}
+                        onBlur={handleNoteBlur}
+                      />
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Notes auto-save as you type</span>
+                        <span className={noteSaveStatus === "saving" ? "text-amber-500" : noteSaveStatus === "saved" && noteContent ? "text-emerald-500" : ""}>
+                          {noteSaveStatus === "saving" ? "Saving..." : noteSaveStatus === "unsaved" ? "Unsaved" : noteContent ? "Saved" : ""}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
               {currentLessonAvailable && (

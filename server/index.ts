@@ -4,6 +4,7 @@ import path from "path";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { startDripProcessor } from "./drip";
 
 // ========== ENV VALIDATION ==========
 if (!process.env.SESSION_SECRET) {
@@ -206,6 +207,7 @@ app.use((req, res, next) => {
   const { seedDatabase } = await import("./seed");
   await seedDatabase();
   await registerRoutes(httpServer, app);
+  startDripProcessor();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

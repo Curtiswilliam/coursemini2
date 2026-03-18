@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, asc, count, inArray, isNull, sql } from "drizzle-orm";
+import { eq, and, desc, asc, count, inArray, isNull, sql, gte, lt } from "drizzle-orm";
 import {
   users, courses, categories, subjects, modules, lessons,
   enrollments, lessonProgress, reviews,
@@ -11,6 +11,7 @@ import {
   emailCampaigns, campaignSends, coursePathways, pathwaySteps, userPathwayProgress,
   userBadges, activityEvents,
   emailTemplateCategories, emailTemplates, emailAutomations,
+  lessonNotes, lessonBookmarks, courseWaitlist, webhooks, webhookDeliveries,
   type InsertUser, type User,
   type InsertCourse, type Course,
   type InsertCategory, type Category,
@@ -36,6 +37,7 @@ import {
   type PathwayStep, type InsertPathwayStep,
   type UserPathwayProgress,
   type EmailTemplateCategory, type EmailTemplate, type EmailAutomation,
+  type Webhook, type WebhookDelivery,
 } from "@shared/schema";
 import { nanoid } from "nanoid";
 
@@ -173,6 +175,32 @@ export interface IStorage {
   renderEmailTemplate(templateId: number, variables: Record<string, string>): Promise<{ subject: string; html: string } | null>;
   fireEmailAutomation(trigger: string, userId: number, variables?: Record<string, string>): Promise<void>;
   seedSystemEmailTemplates(): Promise<void>;
+
+  // Notes & Bookmarks
+  getLessonNote(userId: number, lessonId: number): Promise<any>;
+  upsertLessonNote(userId: number, lessonId: number, content: string): Promise<any>;
+  deleteLessonNote(userId: number, lessonId: number): Promise<void>;
+  getLessonBookmark(userId: number, lessonId: number): Promise<any>;
+  toggleLessonBookmark(userId: number, lessonId: number): Promise<boolean>;
+  getUserBookmarks(userId: number): Promise<any[]>;
+
+  // Waitlist
+  joinWaitlist(userId: number, courseId: number): Promise<void>;
+  leaveWaitlist(userId: number, courseId: number): Promise<void>;
+  getWaitlistEntry(userId: number, courseId: number): Promise<any>;
+  getWaitlistCount(courseId: number): Promise<number>;
+  getWaitlistUsers(courseId: number): Promise<any[]>;
+
+  // Webhooks
+  getWebhooks(): Promise<Webhook[]>;
+  getWebhookById(id: number): Promise<Webhook | undefined>;
+  createWebhook(data: { name: string; url: string; events: string[]; secret?: string }): Promise<Webhook>;
+  updateWebhook(id: number, data: Partial<{ name: string; url: string; events: string[]; secret: string; isActive: boolean }>): Promise<Webhook | undefined>;
+  deleteWebhook(id: number): Promise<void>;
+  getWebhookDeliveries(webhookId: number): Promise<WebhookDelivery[]>;
+
+  // Dashboard stats
+  getDashboardStats(userId: number): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -927,7 +955,13 @@ export class DatabaseStorage implements IStorage {
         const [c] = await db.select({ id: courses.id, title: courses.title, slug: courses.slug, thumbnail: courses.thumbnail }).from(courses).where(eq(courses.id, item.courseId));
         return c;
       }));
-      return { ...b, courses: bundledCourses.filter(Boolean) };
+      // Compute enrollment count across all courses in bundle
+      let enrollmentCount = 0;
+      for (const c of bundledCourses.filter(Boolean)) {
+        const [cnt] = await db.select({ count: count() }).from(enrollments).where(eq(enrollments.courseId, c.id));
+        enrollmentCount += cnt?.count || 0;
+      }
+      return { ...b, courses: bundledCourses.filter(Boolean), enrollmentCount };
     }));
   }
 
@@ -940,6 +974,23 @@ export class DatabaseStorage implements IStorage {
       return c;
     }));
     return { ...bundle, courses: bundledCourses.filter(Boolean) };
+  }
+
+  async getBundleById(id: number): Promise<any | undefined> {
+    const [bundle] = await db.select().from(bundles).where(eq(bundles.id, id));
+    if (!bundle) return undefined;
+    const bc = await db.select().from(bundleCourses).where(eq(bundleCourses.bundleId, bundle.id));
+    const bundledCourses = await Promise.all(bc.map(async (item) => {
+      const [c] = await db.select().from(courses).where(eq(courses.id, item.courseId));
+      return c;
+    }));
+    // Calculate enrollment count
+    let enrollmentCount = 0;
+    for (const c of bundledCourses.filter(Boolean)) {
+      const [cnt] = await db.select({ count: count() }).from(enrollments).where(eq(enrollments.courseId, c.id));
+      enrollmentCount += cnt?.count || 0;
+    }
+    return { ...bundle, courses: bundledCourses.filter(Boolean), enrollmentCount };
   }
 
   async createBundle(data: InsertBundle): Promise<Bundle> {
@@ -2098,6 +2149,277 @@ export class DatabaseStorage implements IStorage {
         isSystem: true,
       });
     }
+  }
+
+  // ─── Notes & Bookmarks ───────────────────────────────────────────────────────
+
+  async getLessonNote(userId: number, lessonId: number): Promise<any> {
+    const [note] = await db
+      .select()
+      .from(lessonNotes)
+      .where(and(eq(lessonNotes.userId, userId), eq(lessonNotes.lessonId, lessonId)));
+    return note || null;
+  }
+
+  async upsertLessonNote(userId: number, lessonId: number, content: string): Promise<any> {
+    const existing = await this.getLessonNote(userId, lessonId);
+    if (existing) {
+      const [updated] = await db
+        .update(lessonNotes)
+        .set({ content, updatedAt: new Date() })
+        .where(eq(lessonNotes.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(lessonNotes)
+        .values({ userId, lessonId, content })
+        .returning();
+      return created;
+    }
+  }
+
+  async deleteLessonNote(userId: number, lessonId: number): Promise<void> {
+    await db
+      .delete(lessonNotes)
+      .where(and(eq(lessonNotes.userId, userId), eq(lessonNotes.lessonId, lessonId)));
+  }
+
+  async getLessonBookmark(userId: number, lessonId: number): Promise<any> {
+    const [bookmark] = await db
+      .select()
+      .from(lessonBookmarks)
+      .where(and(eq(lessonBookmarks.userId, userId), eq(lessonBookmarks.lessonId, lessonId)));
+    return bookmark || null;
+  }
+
+  async toggleLessonBookmark(userId: number, lessonId: number): Promise<boolean> {
+    const existing = await this.getLessonBookmark(userId, lessonId);
+    if (existing) {
+      await db
+        .delete(lessonBookmarks)
+        .where(and(eq(lessonBookmarks.userId, userId), eq(lessonBookmarks.lessonId, lessonId)));
+      return false;
+    } else {
+      await db.insert(lessonBookmarks).values({ userId, lessonId });
+      return true;
+    }
+  }
+
+  async getUserBookmarks(userId: number): Promise<any[]> {
+    const bookmarks = await db
+      .select()
+      .from(lessonBookmarks)
+      .where(eq(lessonBookmarks.userId, userId))
+      .orderBy(desc(lessonBookmarks.createdAt));
+
+    const result = [];
+    for (const bm of bookmarks) {
+      const lesson = await this.getLessonById(bm.lessonId);
+      if (lesson) {
+        result.push({ ...bm, lesson });
+      }
+    }
+    return result;
+  }
+
+  // ─── Waitlist ─────────────────────────────────────────────────────────────────
+
+  async joinWaitlist(userId: number, courseId: number): Promise<void> {
+    const existing = await this.getWaitlistEntry(userId, courseId);
+    if (!existing) {
+      await db.insert(courseWaitlist).values({ userId, courseId });
+    }
+  }
+
+  async leaveWaitlist(userId: number, courseId: number): Promise<void> {
+    await db
+      .delete(courseWaitlist)
+      .where(and(eq(courseWaitlist.userId, userId), eq(courseWaitlist.courseId, courseId)));
+  }
+
+  async getWaitlistEntry(userId: number, courseId: number): Promise<any> {
+    const [entry] = await db
+      .select()
+      .from(courseWaitlist)
+      .where(and(eq(courseWaitlist.userId, userId), eq(courseWaitlist.courseId, courseId)));
+    return entry || null;
+  }
+
+  async getWaitlistCount(courseId: number): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(courseWaitlist)
+      .where(eq(courseWaitlist.courseId, courseId));
+    return result?.count || 0;
+  }
+
+  async getWaitlistUsers(courseId: number): Promise<any[]> {
+    const entries = await db
+      .select()
+      .from(courseWaitlist)
+      .where(eq(courseWaitlist.courseId, courseId))
+      .orderBy(asc(courseWaitlist.createdAt));
+
+    const result = [];
+    for (const entry of entries) {
+      const user = await this.getUser(entry.userId);
+      if (user) {
+        const { password: _pw, ...safeUser } = user as any;
+        result.push({ ...entry, user: safeUser });
+      }
+    }
+    return result;
+  }
+
+  // ─── Webhooks ─────────────────────────────────────────────────────────────────
+
+  async getWebhooks(): Promise<Webhook[]> {
+    return db.select().from(webhooks).orderBy(desc(webhooks.createdAt));
+  }
+
+  async getWebhookById(id: number): Promise<Webhook | undefined> {
+    const [wh] = await db.select().from(webhooks).where(eq(webhooks.id, id));
+    return wh;
+  }
+
+  async createWebhook(data: { name: string; url: string; events: string[]; secret?: string }): Promise<Webhook> {
+    const [created] = await db
+      .insert(webhooks)
+      .values({
+        name: data.name,
+        url: data.url,
+        events: data.events as any,
+        secret: data.secret || null,
+        isActive: true,
+      })
+      .returning();
+    return created;
+  }
+
+  async updateWebhook(id: number, data: Partial<{ name: string; url: string; events: string[]; secret: string; isActive: boolean }>): Promise<Webhook | undefined> {
+    const [updated] = await db
+      .update(webhooks)
+      .set(data as any)
+      .where(eq(webhooks.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteWebhook(id: number): Promise<void> {
+    await db.delete(webhooks).where(eq(webhooks.id, id));
+  }
+
+  async getWebhookDeliveries(webhookId: number): Promise<WebhookDelivery[]> {
+    return db
+      .select()
+      .from(webhookDeliveries)
+      .where(eq(webhookDeliveries.webhookId, webhookId))
+      .orderBy(desc(webhookDeliveries.createdAt))
+      .limit(50);
+  }
+
+  // ─── Dashboard Stats ──────────────────────────────────────────────────────────
+
+  async getDashboardStats(userId: number): Promise<any> {
+    const user = await this.getUser(userId);
+
+    // Compute streak: consecutive days with activity (lesson_completed or login)
+    const events = await db
+      .select({ createdAt: activityEvents.createdAt })
+      .from(activityEvents)
+      .where(
+        and(
+          eq(activityEvents.userId, userId),
+          sql`${activityEvents.eventType} IN ('lesson_completed', 'login', 'course_enroll', 'lesson_view')`
+        )
+      )
+      .orderBy(desc(activityEvents.createdAt));
+
+    // Build a set of unique dates (YYYY-MM-DD)
+    const daySet = new Set<string>();
+    for (const ev of events) {
+      const d = ev.createdAt;
+      if (d) {
+        const dateStr = d.toISOString().split("T")[0];
+        daySet.add(dateStr);
+      }
+    }
+
+    // Count consecutive days going back from today
+    let streak = 0;
+    const today = new Date();
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      if (daySet.has(dateStr)) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    // Weekly lessons completed
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const userEnrollments = await db
+      .select({ id: enrollments.id })
+      .from(enrollments)
+      .where(eq(enrollments.userId, userId));
+    const enrollmentIds = userEnrollments.map((e) => e.id);
+
+    let weeklyLessonsCompleted = 0;
+    if (enrollmentIds.length > 0) {
+      const [result] = await db
+        .select({ count: count() })
+        .from(lessonProgress)
+        .where(
+          and(
+            inArray(lessonProgress.enrollmentId, enrollmentIds),
+            eq(lessonProgress.status, "COMPLETED"),
+            gte(lessonProgress.completedAt, sevenDaysAgo)
+          )
+        );
+      weeklyLessonsCompleted = result?.count || 0;
+    }
+
+    // Recommended courses
+    const userInterests = (user as any)?.interests as string[] | null;
+    const allEnrollments = await db.select({ courseId: enrollments.courseId }).from(enrollments).where(eq(enrollments.userId, userId));
+    const enrolledIds = new Set(allEnrollments.map((e) => e.courseId));
+
+    let recommendedCourses: any[] = [];
+    const publishedCourses = await db
+      .select()
+      .from(courses)
+      .where(eq(courses.status, "PUBLISHED"))
+      .orderBy(desc(courses.createdAt))
+      .limit(20);
+
+    const notEnrolled = publishedCourses.filter((c) => !enrolledIds.has(c.id));
+
+    if (userInterests && userInterests.length > 0) {
+      // Try to match by category name or course language/title keywords
+      // Simple approach: take the first 3 not-enrolled courses
+      recommendedCourses = notEnrolled.slice(0, 3);
+    } else {
+      recommendedCourses = notEnrolled.slice(0, 3);
+    }
+
+    // Attach instructor info
+    const enriched = await Promise.all(
+      recommendedCourses.map(async (c) => {
+        const [instructor] = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, c.instructorId));
+        return { ...c, instructor };
+      })
+    );
+
+    return {
+      currentStreak: streak,
+      weeklyLessonsCompleted,
+      weeklyGoal: (user as any)?.weeklyGoalLessons || 5,
+      recommendedCourses: enriched,
+    };
   }
 }
 

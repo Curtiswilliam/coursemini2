@@ -12,6 +12,8 @@ import { storage } from "./storage";
 import { hashPassword, comparePasswords } from "./auth";
 import { fireCampaignTrigger } from "./campaigns";
 import { sendEmail, sendPasswordResetEmail } from "./email";
+import { scheduleDripSequence, schedulePostCompletionSequence, scheduleInactivityEmail } from "./drip";
+import { fireWebhook } from "./webhooks";
 import crypto from "crypto";
 import type { User } from "@shared/schema";
 
@@ -185,6 +187,7 @@ export async function registerRoutes(
       req.session.userId = user.id;
       fireCampaignTrigger("USER_SIGNUP", user.id).catch(() => {});
       storage.fireEmailAutomation("user_signup", user.id, {}).catch(() => {});
+      fireWebhook("user.created", { userId: user.id, email: normalizedEmail, name: user.name }).catch(() => {});
       res.json({ userId: user.id, step: "verify-email" });
     } catch (e: any) {
       res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
@@ -329,6 +332,7 @@ export async function registerRoutes(
           platform: req.headers["sec-ch-ua-platform"]?.toString().replace(/"/g, "") || "Unknown"
         }
       }).catch(() => {});
+      scheduleInactivityEmail(user.id).catch(() => {});
       res.json({ id: user.id, username: user.username, name: user.name, email: user.email, role: user.role });
     } catch (e: any) {
       res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
@@ -350,7 +354,7 @@ export async function registerRoutes(
       return res.status(401).json({ message: "User not found" });
     }
     const u = user as any;
-    res.json({ id: u.id, username: u.username, name: u.name, email: u.email, role: u.role, avatar: u.avatar, bio: u.bio, emailVerified: u.emailVerified, phoneVerified: u.phoneVerified, country: u.country, stateRegion: u.stateRegion, dateOfBirth: u.dateOfBirth, intakeCompletedAt: u.intakeCompletedAt ?? null });
+    res.json({ id: u.id, username: u.username, name: u.name, email: u.email, role: u.role, avatar: u.avatar, bio: u.bio, emailVerified: u.emailVerified, phoneVerified: u.phoneVerified, country: u.country, stateRegion: u.stateRegion, dateOfBirth: u.dateOfBirth, intakeCompletedAt: u.intakeCompletedAt ?? null, weeklyGoalLessons: u.weeklyGoalLessons ?? 5 });
   });
 
   app.post("/api/auth/promote-admin", promoteAdminLimiter, async (req, res) => {
@@ -583,6 +587,8 @@ export async function registerRoutes(
       fireCampaignTrigger("COURSE_ENROLLED", req.session.userId!, courseId).catch(() => {});
       storage.fireEmailAutomation("course_enroll", req.session.userId!, { courseTitle: course.title, courseUrl: `/courses/${course.slug}` }).catch(() => {});
       storage.trackEvent(req.session.userId!, "course_enroll", { courseId: course.id, metadata: { couponCode: req.body.couponCode || null, price: course.price } }).catch(() => {});
+      scheduleDripSequence(req.session.userId!, courseId).catch(() => {});
+      fireWebhook("enrollment.created", { userId: req.session.userId!, courseId, courseTitle: course.title }).catch(() => {});
 
       res.json(enrollment);
     } catch (e: any) {
@@ -720,6 +726,8 @@ export async function registerRoutes(
           fireCampaignTrigger("COURSE_COMPLETED", req.session.userId!, targetEnrollment.courseId).catch(() => {});
           storage.fireEmailAutomation("course_complete", req.session.userId!, { courseTitle: targetCourse.title }).catch(() => {});
           storage.checkAndAwardBadges(req.session.userId!).catch(() => {});
+          schedulePostCompletionSequence(req.session.userId!, targetEnrollment.courseId).catch(() => {});
+          fireWebhook("course.completed", { userId: req.session.userId!, courseId: targetEnrollment.courseId, courseTitle: targetCourse.title }).catch(() => {});
 
           // ── Pathway automation ──────────────────────────────────────────
           // Capture userId synchronously before the async IIFE runs post-response
@@ -2164,6 +2172,222 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
       await storage.deleteEmailAutomation(id);
       res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message }); }
+  });
+
+  // ========== DASHBOARD STATS ==========
+  app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
+    try {
+      const stats = await storage.getDashboardStats(req.session.userId!);
+      res.json(stats);
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.patch("/api/auth/weekly-goal", requireAuth, async (req, res) => {
+    try {
+      const { weeklyGoal } = req.body;
+      if (typeof weeklyGoal !== "number" || weeklyGoal < 1 || weeklyGoal > 50) {
+        return res.status(400).json({ message: "weeklyGoal must be an integer between 1 and 50" });
+      }
+      await storage.updateUser(req.session.userId!, { weeklyGoalLessons: weeklyGoal } as any);
+      res.json({ ok: true, weeklyGoal });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  // ========== NOTES & BOOKMARKS ==========
+  app.get("/api/lessons/:id/note", requireAuth, async (req, res) => {
+    try {
+      const lessonId = parseIdParam(req.params.id);
+      if (lessonId === null) return res.status(400).json({ message: "Invalid lesson ID" });
+      const note = await storage.getLessonNote(req.session.userId!, lessonId);
+      res.json(note || null);
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.put("/api/lessons/:id/note", requireAuth, async (req, res) => {
+    try {
+      const lessonId = parseIdParam(req.params.id);
+      if (lessonId === null) return res.status(400).json({ message: "Invalid lesson ID" });
+      const { content } = req.body;
+      if (!content || typeof content !== "string") return res.status(400).json({ message: "Content is required" });
+      const note = await storage.upsertLessonNote(req.session.userId!, lessonId, content);
+      res.json(note);
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.delete("/api/lessons/:id/note", requireAuth, async (req, res) => {
+    try {
+      const lessonId = parseIdParam(req.params.id);
+      if (lessonId === null) return res.status(400).json({ message: "Invalid lesson ID" });
+      await storage.deleteLessonNote(req.session.userId!, lessonId);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.post("/api/lessons/:id/bookmark", requireAuth, async (req, res) => {
+    try {
+      const lessonId = parseIdParam(req.params.id);
+      if (lessonId === null) return res.status(400).json({ message: "Invalid lesson ID" });
+      const bookmarked = await storage.toggleLessonBookmark(req.session.userId!, lessonId);
+      res.json({ bookmarked });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.get("/api/bookmarks", requireAuth, async (req, res) => {
+    try {
+      const bookmarks = await storage.getUserBookmarks(req.session.userId!);
+      res.json(bookmarks);
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  // ========== WAITLIST ==========
+  app.post("/api/courses/:id/waitlist", requireAuth, async (req, res) => {
+    try {
+      const courseId = parseIdParam(req.params.id);
+      if (courseId === null) return res.status(400).json({ message: "Invalid course ID" });
+      await storage.joinWaitlist(req.session.userId!, courseId);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.delete("/api/courses/:id/waitlist", requireAuth, async (req, res) => {
+    try {
+      const courseId = parseIdParam(req.params.id);
+      if (courseId === null) return res.status(400).json({ message: "Invalid course ID" });
+      await storage.leaveWaitlist(req.session.userId!, courseId);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.get("/api/courses/:id/waitlist/status", requireAuth, async (req, res) => {
+    try {
+      const courseId = parseIdParam(req.params.id);
+      if (courseId === null) return res.status(400).json({ message: "Invalid course ID" });
+      const entry = await storage.getWaitlistEntry(req.session.userId!, courseId);
+      const count = await storage.getWaitlistCount(courseId);
+      res.json({ onWaitlist: !!entry, count });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.post("/api/admin/courses/:id/notify-waitlist", requireAdmin, async (req, res) => {
+    try {
+      const courseId = parseIdParam(req.params.id);
+      if (courseId === null) return res.status(400).json({ message: "Invalid course ID" });
+      const course = await storage.getCourseById(courseId);
+      if (!course) return res.status(404).json({ message: "Course not found" });
+      const waitlistUsers = await storage.getWaitlistUsers(courseId);
+      for (const entry of waitlistUsers) {
+        sendEmail({
+          to: { email: entry.user.email, name: entry.user.name },
+          subject: `"${course.title}" is now available!`,
+          html: `<p>Hi ${entry.user.name},</p><p>Great news! <strong>${course.title}</strong> is now available. Enroll now before spots fill up.</p><p><a href="${process.env.APP_URL || "http://localhost:5000"}/courses/${course.slug}" style="background:#6366f1;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin:12px 0">Enroll Now</a></p><p>The CourseMini Team</p>`,
+        }).catch(() => {});
+      }
+      res.json({ ok: true, notified: waitlistUsers.length });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  // ========== LANDING PAGES ==========
+  app.get("/api/lp/:slug", async (req, res) => {
+    try {
+      const course = await storage.getCourseBySlug(req.params.slug as string);
+      if (!course || !(course as any).landingPageEnabled) {
+        return res.status(404).json({ message: "Landing page not found" });
+      }
+      res.json(course);
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  // ========== WEBHOOKS ==========
+  app.get("/api/admin/webhooks", requireAdmin, async (_req, res) => {
+    try {
+      const whs = await storage.getWebhooks();
+      res.json(whs);
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.post("/api/admin/webhooks", requireAdmin, async (req, res) => {
+    try {
+      const { name, url, events, secret } = req.body;
+      if (!name || !url || !Array.isArray(events)) {
+        return res.status(400).json({ message: "name, url, and events are required" });
+      }
+      const wh = await storage.createWebhook({ name, url, events, secret });
+      res.json(wh);
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.patch("/api/admin/webhooks/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = parseIdParam(req.params.id);
+      if (id === null) return res.status(400).json({ message: "Invalid ID" });
+      const updated = await storage.updateWebhook(id, req.body);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.delete("/api/admin/webhooks/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = parseIdParam(req.params.id);
+      if (id === null) return res.status(400).json({ message: "Invalid ID" });
+      await storage.deleteWebhook(id);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.get("/api/admin/webhooks/:id/deliveries", requireAdmin, async (req, res) => {
+    try {
+      const id = parseIdParam(req.params.id);
+      if (id === null) return res.status(400).json({ message: "Invalid ID" });
+      const deliveries = await storage.getWebhookDeliveries(id);
+      res.json(deliveries);
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  // ========== BUNDLE DETAIL ==========
+  app.get("/api/bundles/:id", async (req, res) => {
+    try {
+      const bundleId = parseIdParam(req.params.id);
+      if (bundleId === null) return res.status(400).json({ message: "Invalid bundle ID" });
+      const bundle = await storage.getBundleById(bundleId);
+      if (!bundle) return res.status(404).json({ message: "Bundle not found" });
+      res.json(bundle);
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
   });
 
   return httpServer;

@@ -27,6 +27,7 @@ import {
   Globe,
   Tag,
   X,
+  BellRing,
 } from "lucide-react";
 
 export default function CourseDetailPage() {
@@ -93,6 +94,39 @@ export default function CourseDetailPage() {
       setCouponError(e.message || "Invalid coupon");
       setAppliedCoupon(null);
     },
+  });
+
+  const { data: waitlistStatus } = useQuery<any>({
+    queryKey: ["/api/courses", course?.id, "waitlist/status"],
+    queryFn: async () => {
+      if (!user || !course) return null;
+      const res = await fetch(`/api/courses/${course.id}/waitlist/status`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!user && !!course?.id,
+  });
+
+  const joinWaitlistMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/courses/${course?.id}/waitlist`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/courses", course?.id, "waitlist/status"] });
+      toast({ title: "Added to waitlist!", description: "We'll notify you when this course opens." });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const leaveWaitlistMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/courses/${course?.id}/waitlist`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/courses", course?.id, "waitlist/status"] });
+      toast({ title: "Removed from waitlist" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const enrollMutation = useMutation({
@@ -437,6 +471,34 @@ export default function CourseDetailPage() {
                           ? "Enroll for Free"
                           : `Enroll - $${discountedPrice.toFixed(2)}`}
                       </Button>
+
+                      {/* Waitlist */}
+                      {course.waitlistEnabled && (
+                        <div className="space-y-2">
+                          {waitlistStatus?.count > 0 && (
+                            <p className="text-xs text-muted-foreground text-center">
+                              {waitlistStatus.count} {waitlistStatus.count === 1 ? "person" : "people"} on the waitlist
+                            </p>
+                          )}
+                          {user && (
+                            <Button
+                              variant="outline"
+                              className="w-full"
+                              onClick={() => {
+                                if (waitlistStatus?.onWaitlist) {
+                                  leaveWaitlistMutation.mutate();
+                                } else {
+                                  joinWaitlistMutation.mutate();
+                                }
+                              }}
+                              disabled={joinWaitlistMutation.isPending || leaveWaitlistMutation.isPending}
+                            >
+                              <BellRing className="mr-2 h-4 w-4" />
+                              {waitlistStatus?.onWaitlist ? "Leave Waitlist" : "Join Waitlist"}
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 

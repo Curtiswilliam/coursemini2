@@ -120,6 +120,7 @@ export default function AdminBundles() {
                         {bundle.isActive ? "Active" : "Inactive"}
                       </Badge>
                       <Badge variant="outline">{bundle.courses?.length || 0} courses</Badge>
+                      <Badge variant="secondary">{bundle.enrollmentCount || 0} enrollments</Badge>
                     </div>
                   </div>
                   <div className="flex gap-2">

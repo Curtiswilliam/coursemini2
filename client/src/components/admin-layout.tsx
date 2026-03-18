@@ -22,6 +22,7 @@ import {
   UsersRound,
   GitBranch,
   Mail,
+  Webhook,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/admin/groups", icon: UsersRound, label: "Student Groups" },
       { href: "/admin/analytics", icon: BarChart3, label: "Analytics" },
       { href: "/admin/email-templates", icon: Mail, label: "Email Templates" },
+      { href: "/admin/webhooks", icon: Webhook, label: "Webhooks" },
     ],
   },
   {
@@ -85,6 +87,9 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     }
     if (href === "/admin/email-templates") {
       return location.startsWith("/admin/email-templates");
+    }
+    if (href === "/admin/webhooks") {
+      return location.startsWith("/admin/webhooks");
     }
     return location === href;
   };

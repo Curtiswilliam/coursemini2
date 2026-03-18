@@ -34,6 +34,8 @@ import EmailTemplates from "@/pages/admin/email-templates";
 import EmailTemplateEditor from "@/pages/admin/email-template-editor";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
+import LandingPage from "@/pages/landing-page";
+import AdminWebhooks from "@/pages/admin/webhooks";
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -74,6 +76,7 @@ function AdminRouter() {
               <Route path="/admin/pathways" component={AdminPathways} />
               <Route path="/admin/groups" component={AdminGroups} />
               <Route path="/admin/email-templates" component={EmailTemplates} />
+              <Route path="/admin/webhooks" component={AdminWebhooks} />
             </Switch>
           </AdminLayout>
         </Route>
@@ -98,6 +101,7 @@ function PublicRouter() {
           <Route path="/learn/:slug" component={CoursePlayer} />
           <Route path="/bundles" component={BundlesPage} />
           <Route path="/certificates/:code" component={CertificatePage} />
+          <Route path="/lp/:slug" component={LandingPage} />
           <Route component={NotFound} />
         </Switch>
       </main>
