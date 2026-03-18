@@ -3,7 +3,7 @@ name: Deploy to Linode
 on:
   push:
     branches: [main]
-  workflow_dispatch:  # allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # needed for schema change detection
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -24,40 +26,88 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # ── Gates: fail before touching production ──────────────────────────────
       - name: Type check
         run: npm run check
 
       - name: Build
         run: npm run build
 
-      - name: Deploy to server via SSH
+      # ── Detect schema changes ───────────────────────────────────────────────
+      - name: Check for schema changes
+        id: schema
+        run: |
+          if git diff HEAD~1 HEAD --name-only | grep -q "shared/schema.ts"; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Schema changed — db:push will run on deploy"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No schema changes — skipping db:push"
+          fi
+
+      # ── Transfer build artifact to server (no build on server) ──────────────
+      - name: Sync dist to server
+        run: |
+          echo "${{ secrets.LINODE_SSH_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          rsync -az --delete \
+            -e "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            dist/ \
+            ${{ secrets.LINODE_USER }}@${{ secrets.LINODE_HOST }}:/var/www/coursemini/dist/
+          rm /tmp/deploy_key
+
+      # ── Deploy on server ────────────────────────────────────────────────────
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.LINODE_HOST }}
           username: ${{ secrets.LINODE_USER }}
           key: ${{ secrets.LINODE_SSH_KEY }}
           port: 22
+          script_stop: true
           script: |
-            set -e
+            set -euo pipefail
             cd /var/www/coursemini
+
+            echo "==> Pulling latest code..."
             git pull origin main
+
+            echo "==> Installing production dependencies..."
             npm ci --omit=dev
-            # Install build tools needed on server
-            npm install --save-dev tsx esbuild vite @vitejs/plugin-react tailwindcss autoprefixer postcss drizzle-kit 2>/dev/null || true
-            npm run build
-            npm run db:push
+
+            echo "==> Running database migrations..."
+            if [ "${{ steps.schema.outputs.changed }}" = "true" ]; then
+              echo "Schema changed — running db:push..."
+              npm run db:push
+            else
+              echo "No schema changes — skipping db:push"
+            fi
+
+            echo "==> Reloading app (zero-downtime)..."
             if pm2 list | grep -q "coursemini"; then
               pm2 reload ecosystem.config.cjs --env production
             else
               pm2 start ecosystem.config.cjs --env production
             fi
             pm2 save
-            echo "Deploy complete!"
 
-      - name: Notify success
+            echo "==> Verifying..."
+            sleep 3
+            STATUS=$(pm2 jlist | node -e "const d=require('fs').readFileSync('/dev/stdin','utf8');const p=JSON.parse(d).find(p=>p.name==='coursemini');console.log(p?p.pm2_env.status:'not found')")
+            if [ "$STATUS" != "online" ]; then
+              echo "ERROR: App status is '$STATUS' after deploy"
+              pm2 logs coursemini --lines 20 --nostream
+              exit 1
+            fi
+
+            echo "==> Deploy complete! App is online."
+
+      - name: Deploy succeeded
         if: success()
         run: echo "✅ Deployed successfully to production"
 
-      - name: Notify failure
+      - name: Deploy failed
         if: failure()
-        run: echo "❌ Deployment failed — check logs above"
+        run: |
+          echo "❌ Deployment failed — check logs above"
+          exit 1

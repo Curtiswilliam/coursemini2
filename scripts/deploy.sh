@@ -1,8 +1,7 @@
 #!/bin/bash
 # =============================================================================
-# CourseMini — Deploy script
-# Runs on the server after GitHub Actions SSHs in, or manually:
-#   bash scripts/deploy.sh
+# CourseMini — Manual deploy script
+# Run on the server directly: bash scripts/deploy.sh
 # =============================================================================
 set -euo pipefail
 
@@ -10,27 +9,42 @@ APP_DIR="/var/www/coursemini"
 cd "$APP_DIR"
 
 echo "==> Pulling latest code..."
+PREV_SCHEMA_HASH=$(git show HEAD:shared/schema.ts 2>/dev/null | md5sum | cut -d' ' -f1 || echo "none")
 git pull origin main
+NEW_SCHEMA_HASH=$(md5sum shared/schema.ts | cut -d' ' -f1)
 
-echo "==> Installing dependencies..."
-npm ci --omit=dev --ignore-scripts
-# Install devDeps needed for build only
-npm install --save-dev tsx esbuild vite @vitejs/plugin-react tailwindcss autoprefixer postcss drizzle-kit 2>/dev/null || true
+echo "==> Installing production dependencies..."
+npm ci --omit=dev
 
 echo "==> Building..."
+# Install build-only devDeps into a temp location, then clean up
+npm install --no-save \
+  tsx esbuild vite @vitejs/plugin-react \
+  tailwindcss autoprefixer postcss \
+  "@tailwindcss/vite" drizzle-kit \
+  "@types/node" typescript
 npm run build
+# Remove devDeps after build
+npm ci --omit=dev
 
 echo "==> Running database migrations..."
-npm run db:push
+if [ "$PREV_SCHEMA_HASH" != "$NEW_SCHEMA_HASH" ]; then
+  echo "Schema changed — running db:push..."
+  npm run db:push
+else
+  echo "No schema changes — skipping db:push"
+fi
 
-echo "==> Restarting app..."
+echo "==> Reloading app (zero-downtime)..."
 if pm2 list | grep -q "coursemini"; then
   pm2 reload ecosystem.config.cjs --env production
 else
   pm2 start ecosystem.config.cjs --env production
 fi
-
 pm2 save
 
-echo "==> Deploy complete! ✓"
+echo "==> Verifying app health..."
+sleep 3
 pm2 status coursemini
+
+echo "==> Deploy complete! ✓"
