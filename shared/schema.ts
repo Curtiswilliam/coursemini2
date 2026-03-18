@@ -42,6 +42,12 @@ export const users = pgTable("users", {
   avatar: text("avatar"),
   bio: text("bio"),
   role: roleEnum("role").notNull().default("STUDENT"),
+  isActive: boolean("is_active").notNull().default(true),
+  highestQualification: text("highest_qualification"),
+  workStatus: text("work_status"),
+  birthYear: integer("birth_year"),
+  interests: jsonb("interests"),
+  intakeCompletedAt: timestamp("intake_completed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

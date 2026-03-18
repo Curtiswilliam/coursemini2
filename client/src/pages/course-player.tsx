@@ -10,7 +10,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Play,
@@ -122,11 +126,168 @@ function VideoPlayer({ url, onProgress }: { url: string; onProgress: (pct: numbe
   );
 }
 
+// ─── Intake Topics ────────────────────────────────────────────────────────────
+
+const INTAKE_TOPICS = [
+  "Business & Entrepreneurship", "Technology & IT", "Health & Wellness",
+  "Creative Arts & Design", "Education & Teaching", "Finance & Accounting",
+  "Marketing & Sales", "Personal Development", "Leadership & Management",
+  "Science & Research", "Trade & Vocational Skills", "Languages", "Law & Legal",
+  "Environment & Sustainability",
+];
+
+const QUALIFICATIONS = [
+  "High School / GED", "Some College, No Degree", "Certificate / Diploma",
+  "Associate's Degree", "Bachelor's Degree", "Master's Degree",
+  "Doctoral Degree / PhD", "Professional Degree", "Other",
+];
+
+const WORK_STATUSES = [
+  "Employed Full-time", "Employed Part-time", "Self-employed / Business Owner",
+  "Student", "Seeking Employment", "Not Currently Working", "Retired",
+];
+
+// ─── Intake Modal ─────────────────────────────────────────────────────────────
+
+function IntakeModal({ onComplete }: { onComplete: () => void }) {
+  const { toast } = useToast();
+  const [country, setCountry] = useState("");
+  const [stateRegion, setStateRegion] = useState("");
+  const [qualification, setQualification] = useState("");
+  const [workStatus, setWorkStatus] = useState("");
+  const [birthYear, setBirthYear] = useState("");
+  const [interests, setInterests] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const toggleInterest = (topic: string) => {
+    setInterests(prev =>
+      prev.includes(topic) ? prev.filter(t => t !== topic) : [...prev, topic]
+    );
+  };
+
+  const handleSubmit = async () => {
+    if (!country.trim()) return toast({ title: "Country is required", variant: "destructive" });
+    if (!stateRegion.trim()) return toast({ title: "State/Region is required", variant: "destructive" });
+    if (!qualification) return toast({ title: "Please select your highest qualification", variant: "destructive" });
+    if (!workStatus) return toast({ title: "Please select your work status", variant: "destructive" });
+    const year = parseInt(birthYear);
+    if (!birthYear || isNaN(year) || year < 1900 || year > new Date().getFullYear() - 10) {
+      return toast({ title: "Enter a valid birth year", variant: "destructive" });
+    }
+    if (interests.length === 0) return toast({ title: "Select at least one interest", variant: "destructive" });
+
+    setSaving(true);
+    try {
+      await apiRequest("POST", "/api/auth/complete-intake", {
+        country: country.trim(),
+        stateRegion: stateRegion.trim(),
+        highestQualification: qualification,
+        workStatus,
+        birthYear: year,
+        interests,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      onComplete();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" onPointerDownOutside={e => e.preventDefault()}>
+        <DialogHeader>
+          <DialogTitle>Before you start</DialogTitle>
+          <DialogDescription>
+            Help us personalise your learning experience by telling us a little about yourself.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 pt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Country</Label>
+              <Input placeholder="e.g. Australia" value={country} onChange={e => setCountry(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>State / Region</Label>
+              <Input placeholder="e.g. Queensland" value={stateRegion} onChange={e => setStateRegion(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Highest Qualification</Label>
+            <Select value={qualification} onValueChange={setQualification}>
+              <SelectTrigger><SelectValue placeholder="Select qualification…" /></SelectTrigger>
+              <SelectContent>
+                {QUALIFICATIONS.map(q => <SelectItem key={q} value={q}>{q}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Work Status</Label>
+            <Select value={workStatus} onValueChange={setWorkStatus}>
+              <SelectTrigger><SelectValue placeholder="Select work status…" /></SelectTrigger>
+              <SelectContent>
+                {WORK_STATUSES.map(w => <SelectItem key={w} value={w}>{w}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Birth Year</Label>
+            <Input
+              type="number"
+              placeholder="e.g. 1990"
+              min={1900}
+              max={new Date().getFullYear() - 10}
+              value={birthYear}
+              onChange={e => setBirthYear(e.target.value)}
+              className="w-32"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Interests <span className="text-muted-foreground font-normal">(select all that apply)</span></Label>
+            <div className="flex flex-wrap gap-2">
+              {INTAKE_TOPICS.map(topic => (
+                <button
+                  key={topic}
+                  type="button"
+                  onClick={() => toggleInterest(topic)}
+                  className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                    interests.includes(topic)
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border hover:bg-muted"
+                  }`}
+                >
+                  {topic}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <Button className="w-full" onClick={handleSubmit} disabled={saving}>
+            {saving ? "Saving…" : "Continue to Course"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Course Player ─────────────────────────────────────────────────────────────
+
 export default function CoursePlayer() {
   const [, params] = useRoute("/learn/:slug");
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showIntake, setShowIntake] = useState(false);
 
   // Support ?lesson=<id> for preview deep-linking from the studio
   const initialLessonId = (() => {
@@ -210,6 +371,13 @@ export default function CoursePlayer() {
       setCurrentLessonId(firstIncomplete?.id || allLessons[0].id);
     }
   }, [allLessons, currentLessonId, progressMap]);
+
+  // Show intake form when student enters a course for the first time
+  useEffect(() => {
+    if (courseData && user && user.role === "STUDENT" && !(user as any).intakeCompletedAt) {
+      setShowIntake(true);
+    }
+  }, [courseData, user]);
 
   const currentLesson = allLessons.find((l: any) => l.id === currentLessonId);
   const currentIndex = allLessons.findIndex((l: any) => l.id === currentLessonId);
@@ -448,6 +616,7 @@ export default function CoursePlayer() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)]" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+      {showIntake && <IntakeModal onComplete={() => setShowIntake(false)} />}
       <div
         className={`${sidebarOpen ? "w-80" : "w-0"} transition-all duration-200 border-r bg-card shrink-0 overflow-hidden`}
       >

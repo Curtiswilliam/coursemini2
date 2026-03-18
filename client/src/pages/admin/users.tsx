@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Users, Shield, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
 
-type UserRow = { id: number; username: string; name: string; email: string; role: string };
+type UserRow = { id: number; username: string; name: string; email: string; role: string; isActive: boolean };
 
 export default function AdminUsers() {
   const { user } = useAuth();
@@ -27,10 +28,23 @@ export default function AdminUsers() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      toast({ title: "Role updated", description: "User role has been changed successfully." });
+      toast({ title: "Role updated" });
     },
     onError: () => {
       toast({ title: "Failed to update role", variant: "destructive" });
+    },
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ userId, isActive }: { userId: number; isActive: boolean }) => {
+      await apiRequest("PATCH", `/api/admin/users/${userId}/status`, { isActive });
+    },
+    onSuccess: (_, { isActive }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: isActive ? "User activated" : "User deactivated" });
+    },
+    onError: (e: any) => {
+      toast({ title: "Failed to update status", description: e.message, variant: "destructive" });
     },
   });
 
@@ -98,19 +112,31 @@ export default function AdminUsers() {
                     {u.id === user?.id ? (
                       <Badge variant="default" data-testid={`badge-role-${u.id}`}>ADMIN (You)</Badge>
                     ) : (
-                      <Select
-                        value={u.role}
-                        onValueChange={(role) => updateRoleMutation.mutate({ userId: u.id, role })}
-                      >
-                        <SelectTrigger className="w-40" data-testid={`select-role-${u.id}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="STUDENT">Student</SelectItem>
-                          <SelectItem value="INSTRUCTOR">Instructor</SelectItem>
-                          <SelectItem value="ADMIN">Admin</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={u.isActive !== false}
+                            onCheckedChange={(isActive) => updateStatusMutation.mutate({ userId: u.id, isActive })}
+                            title={u.isActive !== false ? "Active — click to deactivate" : "Inactive — click to activate"}
+                          />
+                          <span className="text-xs text-muted-foreground w-16">
+                            {u.isActive !== false ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+                        <Select
+                          value={u.role}
+                          onValueChange={(role) => updateRoleMutation.mutate({ userId: u.id, role })}
+                        >
+                          <SelectTrigger className="w-36" data-testid={`select-role-${u.id}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="STUDENT">Student</SelectItem>
+                            <SelectItem value="INSTRUCTOR">Instructor</SelectItem>
+                            <SelectItem value="ADMIN">Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </>
                     )}
                   </div>
                 </CardContent>

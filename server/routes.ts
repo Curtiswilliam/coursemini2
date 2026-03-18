@@ -273,6 +273,33 @@ export async function registerRoutes(
     }
   });
 
+  // Student intake form (submitted on first course entry)
+  app.post("/api/auth/complete-intake", requireAuth, async (req, res) => {
+    try {
+      const { country, stateRegion, highestQualification, workStatus, birthYear, interests } = req.body;
+      if (!country || typeof country !== "string") return res.status(400).json({ message: "Country is required" });
+      if (!stateRegion || typeof stateRegion !== "string") return res.status(400).json({ message: "State/Region is required" });
+      if (!highestQualification || typeof highestQualification !== "string") return res.status(400).json({ message: "Highest qualification is required" });
+      if (!workStatus || typeof workStatus !== "string") return res.status(400).json({ message: "Work status is required" });
+      if (!birthYear || typeof birthYear !== "number" || birthYear < 1900 || birthYear > new Date().getFullYear()) {
+        return res.status(400).json({ message: "A valid birth year is required" });
+      }
+      if (!Array.isArray(interests) || interests.length === 0) return res.status(400).json({ message: "Select at least one interest" });
+      await storage.updateUser(req.session.userId!, {
+        country: country.trim(),
+        stateRegion: stateRegion.trim(),
+        highestQualification: highestQualification.trim(),
+        workStatus: workStatus.trim(),
+        birthYear,
+        interests,
+        intakeCompletedAt: new Date(),
+      } as any);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
   app.post("/api/auth/login", authRateLimiter, async (req, res) => {
     try {
       const { username, password } = req.body;
@@ -287,6 +314,9 @@ export async function registerRoutes(
       const passwordValid = await comparePasswords(password, user?.password ?? DUMMY_HASH);
       if (!user || !passwordValid) {
         return res.status(401).json({ message: "Invalid credentials" });
+      }
+      if ((user as any).isActive === false) {
+        return res.status(403).json({ message: "Your account has been deactivated. Please contact support." });
       }
       req.session.userId = user.id;
       const ua = req.headers["user-agent"] || "";
@@ -319,7 +349,8 @@ export async function registerRoutes(
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
-    res.json({ id: user.id, username: user.username, name: user.name, email: user.email, role: user.role, avatar: user.avatar, bio: user.bio, emailVerified: (user as any).emailVerified, phoneVerified: (user as any).phoneVerified, country: (user as any).country, stateRegion: (user as any).stateRegion, dateOfBirth: (user as any).dateOfBirth });
+    const u = user as any;
+    res.json({ id: u.id, username: u.username, name: u.name, email: u.email, role: u.role, avatar: u.avatar, bio: u.bio, emailVerified: u.emailVerified, phoneVerified: u.phoneVerified, country: u.country, stateRegion: u.stateRegion, dateOfBirth: u.dateOfBirth, intakeCompletedAt: u.intakeCompletedAt ?? null });
   });
 
   app.post("/api/auth/promote-admin", promoteAdminLimiter, async (req, res) => {
@@ -1491,7 +1522,7 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
       return res.status(403).json({ message: "Only super admins can manage users" });
     }
     const allUsers = await storage.getUsers();
-    res.json(allUsers.map(u => ({ id: u.id, username: u.username, name: u.name, email: u.email, role: u.role })));
+    res.json(allUsers.map(u => ({ id: u.id, username: u.username, name: u.name, email: u.email, role: u.role, isActive: (u as any).isActive ?? true })));
   });
 
   app.patch("/api/admin/users/:id/role", requireAdmin, async (req, res) => {
@@ -1511,6 +1542,25 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
         return res.status(404).json({ message: "User not found" });
       }
       res.json({ id: updated.id, username: updated.username, name: updated.name, email: updated.email, role: updated.role });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/status", requireAdmin, async (req, res) => {
+    try {
+      const currentUser = req.currentUser!;
+      if (currentUser.role !== "ADMIN") {
+        return res.status(403).json({ message: "Only super admins can manage users" });
+      }
+      const userId = parseIdParam(req.params.id);
+      if (userId === null) return res.status(400).json({ message: "Invalid user ID" });
+      if (userId === currentUser.id) return res.status(400).json({ message: "You cannot deactivate your own account" });
+      const { isActive } = req.body;
+      if (typeof isActive !== "boolean") return res.status(400).json({ message: "isActive must be a boolean" });
+      const updated = await storage.updateUser(userId, { isActive } as any);
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      res.json({ id: updated.id, isActive: (updated as any).isActive });
     } catch (e: any) {
       res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
     }
