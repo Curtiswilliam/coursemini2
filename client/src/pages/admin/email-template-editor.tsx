@@ -575,9 +575,9 @@ export default function EmailTemplateEditor() {
 
       {/* Main layout */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Left sidebar */}
-        <aside className="w-[280px] shrink-0 border-r bg-card overflow-y-auto flex flex-col">
-          <Accordion type="multiple" defaultValue={["blocks", "variables"]} className="flex-1">
+        {/* Left sidebar — block palette */}
+        <aside className="w-[220px] shrink-0 border-r bg-card overflow-y-auto">
+          <Accordion type="multiple" defaultValue={["blocks", "variables"]}>
             {/* Add Blocks */}
             <AccordionItem value="blocks" className="border-b">
               <AccordionTrigger className="px-4 py-3 text-sm font-semibold hover:no-underline">
@@ -590,6 +590,7 @@ export default function EmailTemplateEditor() {
                     return (
                       <button
                         key={bt.type}
+                        type="button"
                         onClick={() => addBlock(bt.type)}
                         className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg border border-border hover:bg-muted hover:border-primary/40 transition-colors text-xs font-medium text-muted-foreground hover:text-foreground"
                       >
@@ -608,11 +609,12 @@ export default function EmailTemplateEditor() {
                 Variables
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-3">
-                <p className="text-xs text-muted-foreground mb-2">Click to copy to clipboard</p>
+                <p className="text-xs text-muted-foreground mb-2">Click to copy</p>
                 <div className="space-y-1.5">
                   {VARIABLES.map(v => (
                     <button
                       key={v.key}
+                      type="button"
                       onClick={() => copyVariable(v.key)}
                       className="w-full flex items-start gap-2 p-1.5 rounded-md hover:bg-muted transition-colors text-left group"
                     >
@@ -626,24 +628,6 @@ export default function EmailTemplateEditor() {
               </AccordionContent>
             </AccordionItem>
           </Accordion>
-
-          {/* Block editor (when selected) */}
-          {selectedBlock && (
-            <div className="border-t p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Edit {selectedBlock.type.charAt(0) + selectedBlock.type.slice(1).toLowerCase()}
-                </span>
-                <button onClick={() => setSelectedBlockId(null)} className="text-xs text-muted-foreground hover:text-foreground">
-                  Done
-                </button>
-              </div>
-              <BlockEditor
-                block={selectedBlock}
-                onChange={content => updateBlock(selectedBlock.id, content)}
-              />
-            </div>
-          )}
         </aside>
 
         {/* Canvas */}
@@ -748,6 +732,36 @@ export default function EmailTemplateEditor() {
             </div>
           </div>
         </main>
+
+        {/* Right sidebar — block editor */}
+        {selectedBlock ? (
+          <aside className="w-[260px] shrink-0 border-l bg-card overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+              <span className="text-sm font-semibold">
+                Edit {selectedBlock.type.charAt(0) + selectedBlock.type.slice(1).toLowerCase()}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedBlockId(null)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Done
+              </button>
+            </div>
+            <div className="p-3 flex-1">
+              <BlockEditor
+                block={selectedBlock}
+                onChange={content => updateBlock(selectedBlock.id, content)}
+              />
+            </div>
+          </aside>
+        ) : (
+          <aside className="w-[260px] shrink-0 border-l bg-card flex items-center justify-center p-4">
+            <p className="text-xs text-muted-foreground text-center">
+              Click a block in the canvas to edit it
+            </p>
+          </aside>
+        )}
       </div>
 
       {/* Preview modal */}
