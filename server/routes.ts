@@ -64,7 +64,6 @@ export async function registerRoutes(
       store: new PgSession({
         pool: sessionPool,
         tableName: "user_sessions",
-        createTableIfMissing: true,
       }),
       secret: process.env.SESSION_SECRET || (process.env.NODE_ENV === "production" ? (() => { throw new Error("SESSION_SECRET must be set in production"); })() : "dev-only-secret"),
       resave: false,
