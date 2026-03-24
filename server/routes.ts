@@ -1077,6 +1077,22 @@ export async function registerRoutes(
     res.json({ url: `/uploads/${req.file.filename}` });
   });
 
+  const uploadAny = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, uploadDir),
+      filename: (_req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        cb(null, crypto.randomUUID() + ext);
+      },
+    }),
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  });
+
+  app.post("/api/admin/upload/file", requireAdmin, uploadAny.single("file"), (req: any, res) => {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    res.json({ url: `/uploads/${req.file.filename}`, name: req.file.originalname });
+  });
+
   // ─── Course duplication ────────────────────────────────────────────────────────
   app.post("/api/admin/courses/:id/duplicate", requireAdmin, async (req: any, res) => {
     try {

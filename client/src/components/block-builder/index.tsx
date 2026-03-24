@@ -14,7 +14,7 @@ import {
   Type, Heading, Image, Video, Quote, Info, Code,
   List, ListOrdered, Minus, MousePointer,
   ChevronDown, ChevronUp, LayoutDashboard, RefreshCw, ListChecks, Clock,
-  Grid, Download, Table, CheckCircle2, X, Pencil,
+  Grid, Download, Table, CheckCircle2, X, Pencil, UploadCloud,
 } from "lucide-react";
 
 export type BlockType =
@@ -173,18 +173,41 @@ function HeadingEditor({ content, onChange }: { content: any; onChange: (c: any)
 }
 
 function ImageEditor({ content, onChange }: { content: any; onChange: (c: any) => void }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/admin/upload", { method: "POST", body: formData, credentials: "include" });
+      const data = await res.json();
+      if (data.url) onChange({ ...content, url: data.url });
+    } catch {}
+    setUploading(false);
+  };
+
   return (
     <div className="space-y-3">
-      <Input value={content.url || ""} onChange={(e) => onChange({ ...content, url: e.target.value })} placeholder="Image URL" />
+      <div className="flex gap-2">
+        <Input value={content.url || ""} onChange={(e) => onChange({ ...content, url: e.target.value })} placeholder="Image URL" className="flex-1" />
+        <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+          <UploadCloud className="h-3.5 w-3.5 mr-1" />
+          {uploading ? "Uploading..." : "Upload"}
+        </Button>
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = ""; }} />
+      </div>
       <Input value={content.alt || ""} onChange={(e) => onChange({ ...content, alt: e.target.value })} placeholder="Alt text" />
       <Input value={content.caption || ""} onChange={(e) => onChange({ ...content, caption: e.target.value })} placeholder="Caption (optional)" />
       <Select value={content.align || "center"} onValueChange={(v) => onChange({ ...content, align: v })}>
-        <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="left">Left</SelectItem>
           <SelectItem value="center">Center</SelectItem>
           <SelectItem value="right">Right</SelectItem>
           <SelectItem value="full">Full Width</SelectItem>
+          <SelectItem value="bestfit">Best Fit</SelectItem>
         </SelectContent>
       </Select>
       {content.url && (
@@ -195,9 +218,22 @@ function ImageEditor({ content, onChange }: { content: any; onChange: (c: any) =
 }
 
 function VideoEditor({ content, onChange }: { content: any; onChange: (c: any) => void }) {
+  const [mode, setMode] = useState<"url" | "embed">(content.embedCode ? "embed" : "url");
+
   return (
     <div className="space-y-3">
-      <Input value={content.url || ""} onChange={(e) => onChange({ ...content, url: e.target.value })} placeholder="YouTube or Vimeo URL" />
+      <div className="flex gap-2">
+        <Button type="button" size="sm" variant={mode === "url" ? "default" : "outline"} className="h-7 text-xs" onClick={() => { setMode("url"); onChange({ ...content, embedCode: undefined }); }}>URL</Button>
+        <Button type="button" size="sm" variant={mode === "embed" ? "default" : "outline"} className="h-7 text-xs" onClick={() => { setMode("embed"); onChange({ ...content, url: undefined }); }}>Embed Code</Button>
+      </div>
+      {mode === "url" ? (
+        <>
+          <Input value={content.url || ""} onChange={(e) => onChange({ ...content, url: e.target.value })} placeholder="YouTube, Vimeo, Loom, or direct video URL" />
+          <p className="text-xs text-muted-foreground">Supports YouTube, Vimeo, Loom (loom.com/share/...) and direct MP4 links</p>
+        </>
+      ) : (
+        <Textarea value={content.embedCode || ""} onChange={(e) => onChange({ ...content, embedCode: e.target.value })} placeholder="Paste embed code (e.g. <iframe ...>)" className="min-h-[80px] font-mono text-xs" />
+      )}
       <Input value={content.caption || ""} onChange={(e) => onChange({ ...content, caption: e.target.value })} placeholder="Caption (optional)" />
     </div>
   );
@@ -374,8 +410,13 @@ function ProcessEditor({ content, onChange }: { content: any; onChange: (c: any)
 
 function FlashcardsEditor({ content, onChange }: { content: any; onChange: (c: any) => void }) {
   const cards: Array<{ front: string; back: string }> = content.cards || [{ front: "", back: "" }];
+  const heading = content.heading !== undefined ? content.heading : "Test your knowledge";
   return (
     <div className="space-y-3">
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Section heading</label>
+        <Input value={heading} onChange={(e) => onChange({ ...content, heading: e.target.value })} placeholder="Test your knowledge" />
+      </div>
       {cards.map((card, i) => (
         <div key={i} className="border rounded-md p-3 space-y-2">
           <div className="flex items-center justify-between">
@@ -480,14 +521,37 @@ function TableEditor({ content, onChange }: { content: any; onChange: (c: any) =
 
 function GalleryEditor({ content, onChange }: { content: any; onChange: (c: any) => void }) {
   const images: Array<{ url: string; caption: string }> = content.images || [{ url: "", caption: "" }];
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const handleUpload = async (file: File, i: number) => {
+    setUploadingIdx(i);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/admin/upload", { method: "POST", body: formData, credentials: "include" });
+      const data = await res.json();
+      if (data.url) {
+        const next = [...images]; next[i] = { ...next[i], url: data.url }; onChange({ ...content, images: next });
+      }
+    } catch {}
+    setUploadingIdx(null);
+  };
+
   return (
     <div className="space-y-3">
       {images.map((img, i) => (
         <div key={i} className="flex gap-2 items-start">
           <div className="flex-1 space-y-1">
-            <Input value={img.url} onChange={(e) => {
-              const next = [...images]; next[i] = { ...img, url: e.target.value }; onChange({ ...content, images: next });
-            }} placeholder="Image URL" />
+            <div className="flex gap-1">
+              <Input value={img.url} onChange={(e) => {
+                const next = [...images]; next[i] = { ...img, url: e.target.value }; onChange({ ...content, images: next });
+              }} placeholder="Image URL" className="flex-1" />
+              <Button type="button" variant="outline" size="sm" className="h-9 shrink-0 text-xs px-2" onClick={() => fileInputRefs.current[i]?.click()} disabled={uploadingIdx === i}>
+                <UploadCloud className="h-3.5 w-3.5" />
+              </Button>
+              <input ref={el => { fileInputRefs.current[i] = el; }} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f, i); e.target.value = ""; }} />
+            </div>
             <Input value={img.caption} onChange={(e) => {
               const next = [...images]; next[i] = { ...img, caption: e.target.value }; onChange({ ...content, images: next });
             }} placeholder="Caption (optional)" />
@@ -538,9 +602,31 @@ function TimelineEditor({ content, onChange }: { content: any; onChange: (c: any
 }
 
 function FileEditor({ content, onChange }: { content: any; onChange: (c: any) => void }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/admin/upload/file", { method: "POST", body: formData, credentials: "include" });
+      const data = await res.json();
+      if (data.url) onChange({ ...content, url: data.url, name: content.name || data.name || file.name });
+    } catch {}
+    setUploading(false);
+  };
+
   return (
     <div className="space-y-3">
-      <Input value={content.url || ""} onChange={(e) => onChange({ ...content, url: e.target.value })} placeholder="File URL" />
+      <div className="flex gap-2">
+        <Input value={content.url || ""} onChange={(e) => onChange({ ...content, url: e.target.value })} placeholder="File URL" className="flex-1" />
+        <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+          <UploadCloud className="h-3.5 w-3.5 mr-1" />
+          {uploading ? "Uploading..." : "Upload"}
+        </Button>
+        <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = ""; }} />
+      </div>
       <Input value={content.name || ""} onChange={(e) => onChange({ ...content, name: e.target.value })} placeholder="Display name" />
       <Textarea value={content.description || ""} onChange={(e) => onChange({ ...content, description: e.target.value })} placeholder="File description (optional)" className="min-h-[60px]" />
     </div>
@@ -569,6 +655,35 @@ function ButtonEditor({ content, onChange }: { content: any; onChange: (c: any) 
             <SelectItem value="right">Right</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-xs text-muted-foreground">Button size: {content.size || 3}</label>
+        <input
+          type="range"
+          min={1}
+          max={6}
+          value={content.size || 3}
+          onChange={(e) => onChange({ ...content, size: parseInt(e.target.value) })}
+          className="w-full h-2 accent-primary"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-muted-foreground shrink-0">Custom colour:</label>
+        <input
+          type="color"
+          value={content.color || "#6366f1"}
+          onChange={(e) => onChange({ ...content, color: e.target.value })}
+          className="h-8 w-10 rounded cursor-pointer border border-border"
+        />
+        <Input
+          value={content.color || ""}
+          onChange={(e) => onChange({ ...content, color: e.target.value || undefined })}
+          placeholder="#hex or empty for default"
+          className="flex-1 text-xs h-8"
+        />
+        {content.color && (
+          <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => onChange({ ...content, color: undefined })}>Reset</Button>
+        )}
       </div>
     </div>
   );
@@ -750,6 +865,7 @@ interface BlockRowProps {
   onDragStart: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
+  onDragEnd: (e: React.DragEvent) => void;
   isDragging: boolean;
   isEditing: boolean;
   isSettingsOpen: boolean;
@@ -763,7 +879,7 @@ interface BlockRowProps {
 function BlockRow({
   block, onEdit, onDelete, onDuplicate,
   onMoveUp, onMoveDown, isFirst, isLast,
-  onDragStart, onDragOver, onDrop, isDragging,
+  onDragStart, onDragOver, onDrop, onDragEnd, isDragging,
   isEditing, isSettingsOpen,
   onSaveContent, onCloseEdit,
   onOpenSettings, onCloseSettings, onSaveSettings,
@@ -778,6 +894,7 @@ function BlockRow({
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      onDragEnd={onDragEnd}
       className={`group relative transition-all ${isDragging ? "opacity-40" : ""}`}
       style={settings.background ? { background: settings.background } : {}}
     >
@@ -886,8 +1003,9 @@ export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
       const res = await apiRequest("POST", `/api/lessons/${lessonId}/blocks`, { type, position, content: "{}", settings: "{}" });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (newBlock: Block) => {
       queryClient.invalidateQueries({ queryKey: ["/api/lessons", lessonId, "blocks"] });
+      setEditingBlockId(newBlock.id);
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -1016,6 +1134,7 @@ export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
                 onDragStart={(e) => { setDragId(block.id); e.dataTransfer.effectAllowed = "move"; }}
                 onDragOver={(e) => { e.preventDefault(); setDragOverId(block.id); }}
                 onDrop={() => handleDrop(block.id)}
+                onDragEnd={() => { setDragId(null); setDragOverId(null); }}
                 isDragging={dragId === block.id}
                 isEditing={editingBlockId === block.id}
                 isSettingsOpen={settingsBlockId === block.id}

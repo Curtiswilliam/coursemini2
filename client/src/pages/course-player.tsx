@@ -37,6 +37,8 @@ import {
   BookmarkCheck,
   StickyNote,
   ChevronUp,
+  Timer,
+  CheckCircle2,
 } from "lucide-react";
 
 function getEmbedUrl(url: string): { type: "youtube" | "vimeo" | "direct"; embedUrl: string } | null {
@@ -306,12 +308,19 @@ export default function CoursePlayer() {
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
   const [quizResult, setQuizResult] = useState<any>(null);
   const [quizSubmitting, setQuizSubmitting] = useState(false);
+  const [kcAllAnswered, setKcAllAnswered] = useState(true);
 
   // Notes & bookmarks state
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteContent, setNoteContent] = useState("");
   const [noteSaveStatus, setNoteSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const noteSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Lesson timer
+  const [timerSeconds, setTimerSeconds] = useState<number | null>(null);
+  const [timerDone, setTimerDone] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerActiveRef = useRef(true);
 
   // Progress tracking
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -455,6 +464,7 @@ export default function CoursePlayer() {
     setQuizResult(null);
     setNoteContent("");
     setNoteSaveStatus("saved");
+    setKcAllAnswered(true);
   }, [currentLessonId]);
 
   // Load note content when noteData changes
@@ -465,6 +475,44 @@ export default function CoursePlayer() {
       setNoteContent("");
     }
   }, [noteData]);
+
+  // Timer: init when lesson changes
+  useEffect(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setTimerDone(false);
+    if (currentLesson?.duration && currentLesson.duration > 0) {
+      setTimerSeconds(currentLesson.duration * 60);
+      timerActiveRef.current = true;
+    } else {
+      setTimerSeconds(null);
+    }
+  }, [currentLessonId]);
+
+  // Timer: countdown
+  useEffect(() => {
+    if (timerSeconds === null || timerDone) return;
+    timerRef.current = setInterval(() => {
+      if (!timerActiveRef.current) return;
+      setTimerSeconds(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timerRef.current!);
+          setTimerDone(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [timerSeconds !== null && !timerDone]);
+
+  // Timer: pause when tab not visible
+  useEffect(() => {
+    const handleVisibility = () => {
+      timerActiveRef.current = !document.hidden;
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   const handleNoteChange = (val: string) => {
     setNoteContent(val);
@@ -823,21 +871,32 @@ export default function CoursePlayer() {
                 </span>
                 <div className="flex items-start justify-between gap-3 mt-1">
                   <h1 className="text-2xl font-bold" data-testid="text-lesson-title">{currentLesson.title}</h1>
-                  {enrollment && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="shrink-0 mt-0.5"
-                      onClick={() => toggleBookmarkMutation.mutate()}
-                      title={isBookmarked ? "Remove bookmark" : "Bookmark this lesson"}
-                    >
-                      {isBookmarked ? (
-                        <BookmarkCheck className="h-5 w-5 text-primary fill-primary" />
-                      ) : (
-                        <Bookmark className="h-5 w-5" />
-                      )}
-                    </Button>
-                  )}
+                  <div className="flex items-start gap-3 shrink-0">
+                    {timerSeconds !== null && (
+                      <div className="flex flex-col items-center shrink-0 mt-0.5">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Lesson Duration</span>
+                        <div className={`flex items-center gap-1 text-sm font-mono font-semibold px-2 py-1 rounded-md border ${timerDone ? "border-green-500 bg-green-50 text-green-600 dark:bg-green-950/40 dark:text-green-400" : "border-border bg-muted text-foreground"}`}>
+                          {timerDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
+                          {timerDone ? "0:00" : `${Math.floor((timerSeconds || 0) / 60)}:${String((timerSeconds || 0) % 60).padStart(2, "0")}`}
+                        </div>
+                      </div>
+                    )}
+                    {enrollment && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 mt-0.5"
+                        onClick={() => toggleBookmarkMutation.mutate()}
+                        title={isBookmarked ? "Remove bookmark" : "Bookmark this lesson"}
+                      >
+                        {isBookmarked ? (
+                          <BookmarkCheck className="h-5 w-5 text-primary fill-primary" />
+                        ) : (
+                          <Bookmark className="h-5 w-5" />
+                        )}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -958,7 +1017,7 @@ export default function CoursePlayer() {
 
                   {lessonBlocks.length > 0 ? (
                     <div data-testid="text-lesson-content">
-                      <BlockRenderer blocks={lessonBlocks} />
+                      <BlockRenderer blocks={lessonBlocks} onKnowledgeChecksAnswered={setKcAllAnswered} />
                     </div>
                   ) : currentLesson.content ? (
                     <div
@@ -1046,14 +1105,20 @@ export default function CoursePlayer() {
                       </div>
                     )}
                     {nextLesson && (
-                      <Button
-                        variant={progressMap[currentLessonId!]?.status === "COMPLETED" ? "default" : "outline"}
-                        onClick={() => setCurrentLessonId(nextLesson.id)}
-                        data-testid="button-next-lesson"
-                      >
-                        Next
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
+                      <div className="flex flex-col items-end gap-1">
+                        <Button
+                          variant={progressMap[currentLessonId!]?.status === "COMPLETED" ? "default" : "outline"}
+                          onClick={() => setCurrentLessonId(nextLesson.id)}
+                          data-testid="button-next-lesson"
+                          disabled={!kcAllAnswered}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                        {!kcAllAnswered && (
+                          <p className="text-[10px] text-muted-foreground">Answer all questions to continue</p>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

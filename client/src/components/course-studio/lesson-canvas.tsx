@@ -228,9 +228,10 @@ export function LessonCanvas({ lesson, courseId, onRefresh }: LessonCanvasProps)
                   type="number"
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
-                  placeholder="min"
-                  className="h-7 text-xs w-16"
+                  placeholder="0"
+                  className="h-7 text-xs w-24"
                 />
+                <span className="text-xs text-muted-foreground">min</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Drip days:</span>
@@ -435,6 +436,14 @@ function QuizBuilder({
   onSave: () => void;
   isSaving: boolean;
 }) {
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    if (questions.length === 0) return;
+    const timer = setTimeout(() => onSave(), 1500);
+    return () => clearTimeout(timer);
+  }, [questions]);
+
   const addQuestion = () => {
     onChange([...questions, {
       question: "",

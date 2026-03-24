@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DOMPurify from "dompurify";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, X, Download, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
@@ -26,6 +26,9 @@ function getEmbedUrl(url: string): string | null {
   // Vimeo
   const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
   if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+  // Loom
+  const loomMatch = url.match(/loom\.com\/share\/([a-zA-Z0-9]+)/);
+  if (loomMatch) return `https://www.loom.com/embed/${loomMatch[1]}`;
   return null;
 }
 
@@ -46,16 +49,31 @@ function HeadingBlock({ content }: { content: any }) {
 
 function ImageBlock({ content }: { content: any }) {
   if (!content.url) return null;
-  const alignCls = content.align === "center" ? "mx-auto" : content.align === "right" ? "ml-auto" : "";
+  const align = content.align || "center";
+  const alignCls = align === "center" ? "mx-auto" : align === "right" ? "ml-auto" : "";
+  const widthCls = align === "full" ? "w-full" : align === "bestfit" ? "w-auto max-w-full" : "max-w-2xl";
+  const imgCls = align === "bestfit" ? "max-w-full h-auto rounded-lg" : "w-full rounded-lg";
   return (
-    <figure className={`${content.align === "full" ? "w-full" : "max-w-2xl"} ${alignCls}`}>
-      <img src={content.url} alt={content.alt || ""} className="w-full rounded-lg" />
+    <figure className={`${widthCls} ${alignCls}`}>
+      <img src={content.url} alt={content.alt || ""} className={imgCls} />
       {content.caption && <figcaption className="text-center text-sm text-muted-foreground mt-2">{content.caption}</figcaption>}
     </figure>
   );
 }
 
 function VideoBlock({ content }: { content: any }) {
+  // If embed code is provided, use it directly
+  if (content.embedCode) {
+    return (
+      <figure>
+        <div className="aspect-video rounded-lg overflow-hidden bg-black"
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content.embedCode, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src', 'width', 'height', 'style'] }) }}
+          style={{ position: 'relative' }}
+        />
+        {content.caption && <figcaption className="text-center text-sm text-muted-foreground mt-2">{content.caption}</figcaption>}
+      </figure>
+    );
+  }
   const embedUrl = getEmbedUrl(content.url || "");
   return (
     <figure>
@@ -214,6 +232,7 @@ function TabsBlock({ content }: { content: any }) {
 
 function FlashcardsBlock({ content }: { content: any }) {
   const cards: Array<{ front: string; back: string }> = content.cards || [];
+  const heading = content.heading !== undefined ? content.heading : "Test your knowledge";
   const [flipped, setFlipped] = useState<Set<number>>(new Set());
   const toggle = (i: number) => {
     const next = new Set(flipped);
@@ -221,36 +240,40 @@ function FlashcardsBlock({ content }: { content: any }) {
     setFlipped(next);
   };
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {cards.map((card, i) => (
-        <button
-          key={i}
-          onClick={() => toggle(i)}
-          className="relative h-36 rounded-xl border border-border cursor-pointer group"
-          style={{ perspective: "1000px" }}
-        >
+    <div className="space-y-4">
+      {heading && <h3 className="text-lg font-semibold">{heading}</h3>}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {cards.map((card, i) => (
           <div
-            className="w-full h-full transition-transform duration-500"
-            style={{ transformStyle: "preserve-3d", transform: flipped.has(i) ? "rotateY(180deg)" : "rotateY(0deg)" }}
+            key={i}
+            onClick={() => toggle(i)}
+            className="relative h-36 rounded-xl border border-border cursor-pointer group"
+            style={{ perspective: "1000px" }}
           >
-            {/* Front */}
             <div
-              className="absolute inset-0 flex items-center justify-center p-4 text-center text-sm font-medium rounded-xl bg-card"
-              style={{ backfaceVisibility: "hidden" }}
+              className="w-full h-full transition-transform duration-500"
+              style={{ transformStyle: "preserve-3d", transform: flipped.has(i) ? "rotateY(180deg)" : "rotateY(0deg)" }}
             >
-              {card.front}
-              <span className="absolute bottom-2 right-2 text-[10px] text-muted-foreground">click to flip</span>
-            </div>
-            {/* Back */}
-            <div
-              className="absolute inset-0 flex items-center justify-center p-4 text-center text-sm bg-primary/10 rounded-xl"
-              style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
-            >
-              {card.back}
+              {/* Front */}
+              <div
+                className="absolute inset-0 flex items-center justify-center p-4 pb-8 text-center text-sm font-medium rounded-xl bg-card"
+                style={{ backfaceVisibility: "hidden" as const }}
+              >
+                <span>{card.front}</span>
+                <span className="absolute bottom-2 right-2 text-[10px] text-muted-foreground">click to flip</span>
+              </div>
+              {/* Back */}
+              <div
+                className="absolute inset-0 flex items-center justify-center p-4 pb-8 text-center text-sm rounded-xl bg-green-500/15"
+                style={{ backfaceVisibility: "hidden" as const, transform: "rotateY(180deg)" }}
+              >
+                <span>{card.back}</span>
+                <span className="absolute bottom-2 right-2 text-[10px] text-green-600/70">click to flip</span>
+              </div>
             </div>
           </div>
-        </button>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -277,16 +300,52 @@ function ProcessBlock({ content }: { content: any }) {
   );
 }
 
-function KnowledgeCheckBlock({ content }: { content: any }) {
-  const options: Array<{ text: string; isCorrect: boolean }> = content.options || [];
-  const [selected, setSelected] = useState<number | null>(null);
-  const [submitted, setSubmitted] = useState(false);
+interface KCProps {
+  content: any;
+  // Controlled mode props (passed from BlockRenderer for grouped behavior)
+  controlled?: boolean;
+  selected?: number | null;
+  lockedCorrect?: boolean; // This answer is locked correct
+  submitted?: boolean;
+  onSelect?: (i: number) => void;
+}
 
-  const handleSubmit = () => {
-    if (selected !== null) setSubmitted(true);
+function KnowledgeCheckBlock({ content, controlled, selected, lockedCorrect, submitted, onSelect }: KCProps) {
+  const options: Array<{ text: string; isCorrect: boolean }> = content.options || [];
+
+  // Standalone mode state
+  const [standaloneSelected, setStandaloneSelected] = useState<number | null>(null);
+  const [standaloneSubmitted, setStandaloneSubmitted] = useState(false);
+  const [prevWrong, setPrevWrong] = useState<number | null>(null);
+
+  const isControlled = controlled === true;
+  const activeSelected = isControlled ? (selected ?? null) : standaloneSelected;
+  const activeSubmitted = isControlled ? (submitted ?? false) : standaloneSubmitted;
+
+  const handleSelect = (i: number) => {
+    if (isControlled) {
+      onSelect?.(i);
+    } else {
+      if (standaloneSubmitted && options[standaloneSelected!]?.isCorrect) return; // locked
+      setStandaloneSelected(i);
+    }
   };
 
-  const handleReset = () => { setSelected(null); setSubmitted(false); };
+  const handleStandaloneSubmit = () => {
+    if (standaloneSelected === null) return;
+    if (!options[standaloneSelected]?.isCorrect) {
+      setPrevWrong(standaloneSelected);
+    }
+    setStandaloneSubmitted(true);
+  };
+
+  const handleStandaloneReset = () => {
+    setPrevWrong(standaloneSelected);
+    setStandaloneSubmitted(false);
+  };
+
+  const isCorrectlyAnswered = options[activeSelected!]?.isCorrect;
+  const isLocked = isControlled ? lockedCorrect : (standaloneSubmitted && isCorrectlyAnswered);
 
   return (
     <div className="border border-border rounded-xl p-5 space-y-4">
@@ -296,48 +355,58 @@ function KnowledgeCheckBlock({ content }: { content: any }) {
       </div>
       <div className="space-y-2">
         {options.map((opt, i) => {
-          const isSelected = selected === i;
+          const isSelected = activeSelected === i;
           const isCorrect = opt.isCorrect;
+          // In standalone submitted mode
           let cls = "flex items-center gap-3 p-3 rounded-lg border cursor-pointer text-sm transition-all ";
-          if (!submitted) {
-            cls += isSelected ? "border-primary bg-primary/10" : "border-border hover:border-primary/40 hover:bg-muted/50";
-          } else if (isCorrect) {
-            cls += "border-green-500 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400";
-          } else if (isSelected && !isCorrect) {
-            cls += "border-red-400 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400";
+          if (isLocked) {
+            // All locked green
+            cls += isSelected && isCorrect ? "border-green-500 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 cursor-default" : "border-border opacity-50 cursor-default";
+          } else if (activeSubmitted) {
+            if (isSelected && !isCorrect) {
+              cls += "border-red-400 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400";
+            } else if (isSelected && isCorrect) {
+              cls += "border-green-500 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 cursor-default";
+            } else if (isCorrect) {
+              cls += "border-border opacity-60";
+            } else {
+              cls += "border-border hover:border-primary/40 hover:bg-muted/50";
+            }
           } else {
-            cls += "border-border opacity-60";
+            cls += isSelected ? "border-primary bg-primary/10" : "border-border hover:border-primary/40 hover:bg-muted/50";
           }
+          const canClick = !isLocked && (!activeSubmitted || (activeSubmitted && !isCorrectlyAnswered));
           return (
-            <button key={i} className={cls} onClick={() => !submitted && setSelected(i)} disabled={submitted}>
+            <button key={i} className={cls} onClick={() => canClick && handleSelect(i)} disabled={isLocked || (activeSubmitted && isCorrectlyAnswered)}>
               <span className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${isSelected ? "border-primary" : "border-border"}`}>
                 {isSelected && <span className="w-2 h-2 rounded-full bg-primary" />}
               </span>
               {opt.text}
-              {submitted && isCorrect && <CheckCircle2 className="h-4 w-4 ml-auto text-green-500" />}
-              {submitted && isSelected && !isCorrect && <X className="h-4 w-4 ml-auto text-red-500" />}
+              {activeSubmitted && isSelected && isCorrect && <CheckCircle2 className="h-4 w-4 ml-auto text-green-500" />}
+              {activeSubmitted && isSelected && !isCorrect && <X className="h-4 w-4 ml-auto text-red-500" />}
             </button>
           );
         })}
       </div>
-      {!submitted ? (
-        <Button size="sm" onClick={handleSubmit} disabled={selected === null} className="w-full">
+      {/* Feedback message */}
+      {activeSubmitted && (
+        <div className={`text-sm font-medium ${isCorrectlyAnswered ? "text-green-600" : "text-red-600"}`}>
+          {isCorrectlyAnswered ? "Correct!" : "Incorrect — select a new answer and try again."}
+        </div>
+      )}
+      {activeSubmitted && isCorrectlyAnswered && content.explanation && (
+        <div className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
+          <strong>Explanation: </strong>{content.explanation}
+        </div>
+      )}
+      {/* Standalone-only: submit/try again buttons */}
+      {!isControlled && !activeSubmitted && (
+        <Button size="sm" onClick={handleStandaloneSubmit} disabled={standaloneSelected === null} className="w-full">
           Submit Answer
         </Button>
-      ) : (
-        <div className="space-y-3">
-          <div className={`text-sm font-medium ${options[selected!]?.isCorrect ? "text-green-600" : "text-red-600"}`}>
-            {options[selected!]?.isCorrect ? "Correct!" : "Incorrect. Try again!"}
-          </div>
-          {content.explanation && (
-            <div className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
-              <strong>Explanation: </strong>{content.explanation}
-            </div>
-          )}
-          {!options[selected!]?.isCorrect && (
-            <Button variant="outline" size="sm" onClick={handleReset}>Try Again</Button>
-          )}
-        </div>
+      )}
+      {!isControlled && activeSubmitted && !isCorrectlyAnswered && (
+        <Button variant="outline" size="sm" onClick={handleStandaloneReset}>Try Again</Button>
       )}
     </div>
   );
@@ -442,15 +511,26 @@ function FileBlock({ content }: { content: any }) {
 function ButtonBlock({ content }: { content: any }) {
   if (!content.text) return null;
   const alignCls = content.align === "center" ? "text-center" : content.align === "right" ? "text-right" : "text-left";
-  const styleCls = content.style === "outline"
-    ? "border border-primary text-primary hover:bg-primary/10"
-    : content.style === "secondary"
-    ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-    : "bg-primary text-primary-foreground hover:bg-primary/90";
+  const size = content.size || 3; // 1-6 scale
+  const paddingX = [8, 12, 20, 28, 36, 48][size - 1] || 20;
+  const paddingY = [4, 6, 10, 14, 18, 24][size - 1] || 10;
+  const fontSize = [10, 12, 14, 16, 18, 22][size - 1] || 14;
+  const customColor = content.color;
+  let styleCls = "";
+  let inlineStyle: React.CSSProperties = { paddingLeft: paddingX, paddingRight: paddingX, paddingTop: paddingY, paddingBottom: paddingY, fontSize };
+  if (customColor) {
+    inlineStyle = { ...inlineStyle, backgroundColor: customColor, color: "#fff" };
+  } else if (content.style === "outline") {
+    styleCls = "border border-primary text-primary hover:bg-primary/10";
+  } else if (content.style === "secondary") {
+    styleCls = "bg-secondary text-secondary-foreground hover:bg-secondary/80";
+  } else {
+    styleCls = "bg-primary text-primary-foreground hover:bg-primary/90";
+  }
   return (
     <div className={alignCls}>
       <a href={content.url || "#"} target="_blank" rel="noopener noreferrer">
-        <button className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${styleCls}`}>
+        <button className={`rounded-lg font-medium transition-colors ${styleCls}`} style={inlineStyle}>
           {content.text}
         </button>
       </a>
@@ -497,9 +577,59 @@ function renderBlock(block: Block) {
 
 interface BlockRendererProps {
   blocks: Block[];
+  onKnowledgeChecksAnswered?: (allAnswered: boolean) => void;
 }
 
-export function BlockRenderer({ blocks }: BlockRendererProps) {
+export function BlockRenderer({ blocks, onKnowledgeChecksAnswered }: BlockRendererProps) {
+  const kcBlocks = blocks.filter(b => b.type === "KNOWLEDGE_CHECK");
+  const hasKC = kcBlocks.length > 0;
+
+  // Track selections: { blockId: selectedOptionIndex }
+  const [kcSelections, setKcSelections] = useState<Record<number, number | null>>({});
+  // Track which are locked (correctly answered)
+  const [kcLocked, setKcLocked] = useState<Record<number, boolean>>({});
+  // Track submitted state
+  const [kcSubmitted, setKcSubmitted] = useState(false);
+  // Track previous wrong selections (to show/hide)
+  const [kcPrevWrong, setKcPrevWrong] = useState<Record<number, number | null>>({});
+
+  const allKcAnswered = hasKC && kcBlocks.every(b => kcLocked[b.id] === true);
+
+  useEffect(() => {
+    if (onKnowledgeChecksAnswered) {
+      onKnowledgeChecksAnswered(!hasKC || allKcAnswered);
+    }
+  }, [allKcAnswered, hasKC]);
+
+  const handleKcSelect = (blockId: number, optionIndex: number) => {
+    if (kcLocked[blockId]) return;
+    setKcSelections(prev => ({ ...prev, [blockId]: optionIndex }));
+  };
+
+  const handleGroupSubmit = () => {
+    // For each KC block: check if correct, lock correct ones, mark wrong ones
+    const newLocked = { ...kcLocked };
+    const newPrevWrong = { ...kcPrevWrong };
+    kcBlocks.forEach(b => {
+      if (kcLocked[b.id]) return; // already locked
+      let content: any = {};
+      try { content = JSON.parse(b.content); } catch {}
+      const options: Array<{ text: string; isCorrect: boolean }> = content.options || [];
+      const selected = kcSelections[b.id];
+      if (selected !== null && selected !== undefined && options[selected]?.isCorrect) {
+        newLocked[b.id] = true;
+      } else {
+        newPrevWrong[b.id] = selected ?? null;
+      }
+    });
+    setKcLocked(newLocked);
+    setKcPrevWrong(newPrevWrong);
+    setKcSubmitted(true);
+  };
+
+  const allUnlockedAnswered = kcBlocks.every(b => kcLocked[b.id] || (kcSelections[b.id] !== null && kcSelections[b.id] !== undefined));
+  const hasAnyWrong = kcSubmitted && kcBlocks.some(b => !kcLocked[b.id]);
+
   return (
     <div className="space-y-6">
       {blocks.map((block) => {
@@ -507,6 +637,24 @@ export function BlockRenderer({ blocks }: BlockRendererProps) {
         try { settings = JSON.parse(block.settings); } catch {}
         const paddingMap: Record<string, string> = { sm: "py-3 px-4", md: "py-5 px-0", lg: "py-8 px-0", none: "p-0" };
         const padding = paddingMap[settings.padding || "md"] || "py-5 px-0";
+
+        if (block.type === "KNOWLEDGE_CHECK" && hasKC) {
+          let content: any = {};
+          try { content = JSON.parse(block.content); } catch {}
+          return (
+            <div key={block.id} className={padding} style={settings.background ? { background: settings.background } : {}}>
+              <KnowledgeCheckBlock
+                content={content}
+                controlled
+                selected={kcSelections[block.id] ?? null}
+                lockedCorrect={kcLocked[block.id] ?? false}
+                submitted={kcSubmitted}
+                onSelect={(i) => handleKcSelect(block.id, i)}
+              />
+            </div>
+          );
+        }
+
         return (
           <div
             key={block.id}
@@ -517,6 +665,28 @@ export function BlockRenderer({ blocks }: BlockRendererProps) {
           </div>
         );
       })}
+
+      {/* Shared submit button for all knowledge checks */}
+      {hasKC && !allKcAnswered && (
+        <div className="pt-2">
+          <Button
+            onClick={handleGroupSubmit}
+            disabled={!allUnlockedAnswered}
+            className="w-full"
+          >
+            {hasAnyWrong ? "Re-submit Answers" : "Submit Answers"}
+          </Button>
+          {!allUnlockedAnswered && (
+            <p className="text-xs text-muted-foreground text-center mt-2">Answer all questions before submitting</p>
+          )}
+        </div>
+      )}
+      {hasKC && allKcAnswered && (
+        <div className="flex items-center gap-2 text-green-600 text-sm font-medium pt-2">
+          <CheckCircle2 className="h-4 w-4" />
+          All questions answered correctly!
+        </div>
+      )}
     </div>
   );
 }
