@@ -26,13 +26,15 @@ export function Navbar() {
         <div className="flex h-16 items-center justify-between gap-4">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2" data-testid="link-home">
-              <img src="/logo.png" alt="CourseMini" className="h-9 w-auto" />
+              <img src="/logo.png" alt="CourseMini" className="h-11 w-auto" />
+              <span className="text-xs text-muted-foreground hidden sm:inline">by EQC Institute</span>
             </Link>
             <div className="hidden md:flex items-center gap-1">
               <Link href="/courses">
                 <Button
                   variant={location === "/courses" ? "secondary" : "ghost"}
                   size="sm"
+                  className="text-base"
                   data-testid="link-courses"
                 >
                   Courses
