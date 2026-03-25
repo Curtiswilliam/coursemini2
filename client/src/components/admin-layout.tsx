@@ -103,14 +103,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         {/* Logo */}
         <div className="px-4 py-4 border-b">
           <Link href="/">
-            <div className="flex items-center gap-2 cursor-pointer">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-orange-500 to-pink-500 flex items-center justify-center">
-                <GraduationCap className="h-4 w-4 text-white" />
-              </div>
-              <div>
-                <span className="font-bold text-sm">CourseMini</span>
-                <p className="text-[9px] text-muted-foreground leading-none">by EQC Institute</p>
-              </div>
+            <div className="flex items-center cursor-pointer">
+              <img src="/logo.png" alt="CourseMini" className="h-8 w-auto" />
             </div>
           </Link>
         </div>
