@@ -426,7 +426,7 @@ export const blockTypeEnum = pgEnum("block_type", [
   "TEXT", "HEADING", "IMAGE", "VIDEO", "BUTTON", "DIVIDER",
   "QUOTE", "BULLETED_LIST", "NUMBERED_LIST", "ACCORDION", "TABS",
   "PROCESS", "FLASHCARDS", "KNOWLEDGE_CHECK", "TABLE", "GALLERY",
-  "CALLOUT", "TIMELINE", "CODE", "FILE"
+  "CALLOUT", "TIMELINE", "CODE", "FILE", "NEXT_BUTTON", "NOTES", "VIDEO_DESCRIPTION"
 ]);
 
 export const lessonNotes = pgTable("lesson_notes", {

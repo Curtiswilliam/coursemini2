@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -106,6 +106,26 @@ export function LessonCanvas({ lesson, courseId, onRefresh }: LessonCanvasProps)
       );
     }
   }, [lesson]);
+
+  const { data: lessonBlocks = [] } = useQuery({
+    queryKey: ["/api/lessons", lesson.id, "blocks"],
+    queryFn: async () => {
+      const res = await fetch(`/api/lessons/${lesson.id}/blocks`, { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const totalVideoDuration = lessonBlocks.reduce((sum: number, b: any) => {
+    if (b.type === "VIDEO") {
+      try {
+        const c = JSON.parse(b.content);
+        return sum + (c.duration ? parseFloat(c.duration) : 0);
+      } catch { return sum; }
+    }
+    return sum;
+  }, 0);
+
+  const suggestedDuration = totalVideoDuration > 0 ? Math.round(totalVideoDuration) : null;
 
   const saveData = { title, type, videoUrl, duration, dripDays, minReadSeconds, minVideoPercent, minQuizScore };
   const saveDataStr = JSON.stringify(saveData);
@@ -232,6 +252,16 @@ export function LessonCanvas({ lesson, courseId, onRefresh }: LessonCanvasProps)
                   className="h-7 text-xs w-24"
                 />
                 <span className="text-xs text-muted-foreground">min</span>
+                {suggestedDuration !== null && String(suggestedDuration) !== duration && (
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => setDuration(String(suggestedDuration))}
+                    title="Auto-calculated from video block durations"
+                  >
+                    Use {suggestedDuration} min from videos
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Drip days:</span>

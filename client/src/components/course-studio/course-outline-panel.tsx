@@ -140,6 +140,7 @@ export function CourseOutlinePanel({
     () => new Set<number>(subjects.flatMap((s) => s.modules.map((m) => m.id)))
   );
   const [dragLessonId, setDragLessonId] = useState<number | null>(null);
+  const [dragLessonSourceModuleId, setDragLessonSourceModuleId] = useState<number | null>(null);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/admin/courses", courseId] });
@@ -252,6 +253,13 @@ export function CourseOutlinePanel({
     onSuccess: invalidate,
   });
 
+  const moveLessonToModule = useMutation({
+    mutationFn: async ({ lessonId, targetModuleId, position }: { lessonId: number; targetModuleId: number; position: number }) => {
+      await apiRequest("PATCH", `/api/admin/lessons/${lessonId}`, { moduleId: targetModuleId, position });
+    },
+    onSuccess: invalidate,
+  });
+
   const toggleSubject = (id: number) =>
     setExpandedSubjects((prev) => {
       const next = new Set<number>(prev);
@@ -355,7 +363,16 @@ export function CourseOutlinePanel({
 
                         {/* Lessons */}
                         {isModExpanded && (
-                          <div className="ml-3 space-y-0.5">
+                          <div
+                            className="ml-3 space-y-0.5"
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => {
+                              if (!dragLessonId || dragLessonSourceModuleId === mod.id) { setDragLessonId(null); setDragLessonSourceModuleId(null); return; }
+                              moveLessonToModule.mutate({ lessonId: dragLessonId, targetModuleId: mod.id, position: sortedLessons.length });
+                              setDragLessonId(null);
+                              setDragLessonSourceModuleId(null);
+                            }}
+                          >
                             {sortedLessons.map((lesson) => (
                               <LessonItem
                                 key={lesson.id}
@@ -371,19 +388,33 @@ export function CourseOutlinePanel({
                                 onDuplicate={() => duplicateLesson.mutate(lesson.id)}
                                 blockCount={(lesson as any).blockCount}
                                 draggable
-                                onDragStart={(e) => { setDragLessonId(lesson.id); e.dataTransfer.effectAllowed = "move"; }}
+                                onDragStart={(e) => {
+                                  setDragLessonId(lesson.id);
+                                  setDragLessonSourceModuleId(mod.id);
+                                  e.dataTransfer.effectAllowed = "move";
+                                }}
                                 onDragOver={(e) => { e.preventDefault(); }}
                                 onDrop={() => {
-                                  if (!dragLessonId || dragLessonId === lesson.id) return;
-                                  const ids = sortedLessons.map((l) => l.id);
-                                  const fromIdx = ids.indexOf(dragLessonId);
-                                  const toIdx = ids.indexOf(lesson.id);
-                                  if (fromIdx === -1 || toIdx === -1) return;
-                                  const reordered = [...ids];
-                                  reordered.splice(fromIdx, 1);
-                                  reordered.splice(toIdx, 0, dragLessonId);
-                                  reorderLessons.mutate({ moduleId: mod.id, orderedIds: reordered });
+                                  if (!dragLessonId) return;
+                                  if (dragLessonId === lesson.id) { setDragLessonId(null); setDragLessonSourceModuleId(null); return; }
+
+                                  if (dragLessonSourceModuleId === mod.id) {
+                                    // Same module - reorder
+                                    const ids = sortedLessons.map((l) => l.id);
+                                    const fromIdx = ids.indexOf(dragLessonId);
+                                    const toIdx = ids.indexOf(lesson.id);
+                                    if (fromIdx === -1 || toIdx === -1) { setDragLessonId(null); setDragLessonSourceModuleId(null); return; }
+                                    const reordered = [...ids];
+                                    reordered.splice(fromIdx, 1);
+                                    reordered.splice(toIdx, 0, dragLessonId);
+                                    reorderLessons.mutate({ moduleId: mod.id, orderedIds: reordered });
+                                  } else {
+                                    // Cross-module - move lesson to this module at this position
+                                    const toIdx = sortedLessons.findIndex(l => l.id === lesson.id);
+                                    moveLessonToModule.mutate({ lessonId: dragLessonId, targetModuleId: mod.id, position: toIdx });
+                                  }
                                   setDragLessonId(null);
+                                  setDragLessonSourceModuleId(null);
                                 }}
                               />
                             ))}

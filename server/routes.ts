@@ -1269,6 +1269,56 @@ Create a comprehensive, educational lesson with 8-14 blocks. Include a mix of co
     }
   });
 
+  // ─── AI video description generator ──────────────────────────────────────────
+  app.post("/api/admin/generate-video-description", requireAdmin, async (req: any, res) => {
+    try {
+      const { videoUrl, previousText } = req.body;
+      if (!videoUrl?.trim()) return res.status(400).json({ message: "videoUrl is required" });
+
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) return res.status(503).json({ message: "AI features require ANTHROPIC_API_KEY to be set." });
+
+      // Extract video info from URL for context
+      let videoContext = `Video URL: ${videoUrl}`;
+      const ytMatch = videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+      const loomMatch = videoUrl.match(/loom\.com\/share\/([a-zA-Z0-9]+)/);
+      if (ytMatch) videoContext = `YouTube video ID: ${ytMatch[1]} (URL: ${videoUrl})`;
+      else if (loomMatch) videoContext = `Loom video ID: ${loomMatch[1]} (URL: ${videoUrl})`;
+
+      const editFeedback = previousText?.trim()
+        ? `\n\nThe instructor previously wrote/edited a description like this:\n"${previousText.slice(0, 500)}"\n\nMatch their tone, energy, and communication style.`
+        : "";
+
+      const client = new Anthropic({ apiKey });
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 500,
+        messages: [
+          {
+            role: "user",
+            content: `You are writing a short, exciting course lesson description for students.
+
+${videoContext}
+
+Write a 2-4 sentence description of what students will learn from this video. Make it:
+- Exciting and motivating (sales-style, fun energy)
+- Focused on the OUTCOME and what they'll be able to DO after watching
+- Conversational and engaging, not boring or corporate
+- Under 80 words total${editFeedback}
+
+Return ONLY the description text, no quotes, no preamble.`,
+          },
+        ],
+      });
+
+      const description = (message.content[0] as any).text?.trim();
+      res.json({ description });
+    } catch (e: any) {
+      console.error("[AI video description] error:", e);
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
   async function verifyCourseOwnership(courseId: number, user: User): Promise<boolean> {
     if (user.role === "ADMIN") return true;
     const course = await storage.getCourseById(courseId);

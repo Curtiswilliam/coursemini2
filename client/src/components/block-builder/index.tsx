@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -14,14 +14,14 @@ import {
   Type, Heading, Image, Video, Quote, Info, Code,
   List, ListOrdered, Minus, MousePointer,
   ChevronDown, ChevronUp, ChevronRight, LayoutDashboard, RefreshCw, ListChecks, Clock,
-  Grid, Download, Table, CheckCircle2, X, Pencil, UploadCloud,
+  Grid, Download, Table, CheckCircle2, X, Pencil, UploadCloud, Loader2, Sparkles,
 } from "lucide-react";
 
 export type BlockType =
   | "TEXT" | "HEADING" | "IMAGE" | "VIDEO" | "BUTTON" | "DIVIDER"
   | "QUOTE" | "BULLETED_LIST" | "NUMBERED_LIST" | "ACCORDION" | "TABS"
   | "PROCESS" | "FLASHCARDS" | "KNOWLEDGE_CHECK" | "TABLE" | "GALLERY"
-  | "CALLOUT" | "TIMELINE" | "CODE" | "FILE" | "NEXT_BUTTON" | "NOTES";
+  | "CALLOUT" | "TIMELINE" | "CODE" | "FILE" | "NEXT_BUTTON" | "NOTES" | "VIDEO_DESCRIPTION";
 
 interface Block {
   id: number;
@@ -46,6 +46,7 @@ const BLOCK_CATEGORIES = [
       { type: "HEADING" as BlockType, label: "Heading", icon: Heading, desc: "H1, H2, or H3 heading" },
       { type: "IMAGE" as BlockType, label: "Image", icon: Image, desc: "Image with caption" },
       { type: "VIDEO" as BlockType, label: "Video", icon: Video, desc: "YouTube or Vimeo embed" },
+      { type: "VIDEO_DESCRIPTION" as BlockType, label: "Video Description", icon: Sparkles, desc: "AI-generated video summary" },
       { type: "QUOTE" as BlockType, label: "Quote", icon: Quote, desc: "Blockquote with author" },
       { type: "CALLOUT" as BlockType, label: "Callout", icon: Info, desc: "Info, warning, or tip box" },
       { type: "CODE" as BlockType, label: "Code", icon: Code, desc: "Code block with syntax" },
@@ -224,8 +225,24 @@ function ImageEditor({ content, onChange }: { content: any; onChange: (c: any) =
   );
 }
 
+function getYouTubeThumbnail(url: string): string | null {
+  const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (ytMatch) return `https://img.youtube.com/vi/${ytMatch[1]}/mqdefault.jpg`;
+  return null;
+}
+
+function getYouTubeTitle(url: string): string | null {
+  const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (ytMatch) return `YouTube video (${ytMatch[1]})`;
+  const loomMatch = url.match(/loom\.com\/share\/([a-zA-Z0-9]+)/);
+  if (loomMatch) return `Loom video (${loomMatch[1]})`;
+  return null;
+}
+
 function VideoEditor({ content, onChange }: { content: any; onChange: (c: any) => void }) {
   const [mode, setMode] = useState<"url" | "embed">(content.embedCode ? "embed" : "url");
+  const thumbnail = mode === "url" && content.url ? getYouTubeThumbnail(content.url) : null;
+  const videoLabel = mode === "url" && content.url ? getYouTubeTitle(content.url) : null;
 
   return (
     <div className="space-y-3">
@@ -237,11 +254,33 @@ function VideoEditor({ content, onChange }: { content: any; onChange: (c: any) =
         <>
           <Input value={content.url || ""} onChange={(e) => onChange({ ...content, url: e.target.value })} placeholder="YouTube, Vimeo, Loom, or direct video URL" />
           <p className="text-xs text-muted-foreground">Supports YouTube, Vimeo, Loom (loom.com/share/...) and direct MP4 links</p>
+          {thumbnail && (
+            <div className="flex items-center gap-3 p-2 bg-muted/40 rounded-lg border border-border">
+              <img src={thumbnail} alt="Video thumbnail" className="h-14 w-24 object-cover rounded" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{videoLabel || "Video"}</p>
+                <p className="text-xs text-muted-foreground">{content.url}</p>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <Textarea value={content.embedCode || ""} onChange={(e) => onChange({ ...content, embedCode: e.target.value })} placeholder="Paste embed code (e.g. <iframe ...>)" className="min-h-[80px] font-mono text-xs" />
       )}
       <Input value={content.caption || ""} onChange={(e) => onChange({ ...content, caption: e.target.value })} placeholder="Caption (optional)" />
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-muted-foreground shrink-0">Video duration (min):</label>
+        <Input
+          type="number"
+          min="0"
+          step="0.5"
+          value={content.duration || ""}
+          onChange={(e) => onChange({ ...content, duration: e.target.value ? parseFloat(e.target.value) : undefined })}
+          placeholder="e.g. 5"
+          className="h-7 text-xs w-20"
+        />
+        <span className="text-xs text-muted-foreground">Used to auto-calculate lesson duration</span>
+      </div>
     </div>
   );
 }
@@ -739,6 +778,67 @@ function NotesEditor({ content, onChange }: { content: any; onChange: (c: any) =
   );
 }
 
+function VideoDescriptionEditor({ content, onChange, blockId }: { content: any; onChange: (c: any) => void; blockId?: number }) {
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerate = async () => {
+    const url = content.videoUrl || "";
+    if (!url.trim()) return;
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/admin/generate-video-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ videoUrl: url, previousText: content.text || "" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      onChange({ ...content, text: data.description });
+    } catch (e: any) {
+      alert("AI error: " + e.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">Video URL (YouTube or Loom)</label>
+        <div className="flex gap-2">
+          <Input
+            value={content.videoUrl || ""}
+            onChange={(e) => onChange({ ...content, videoUrl: e.target.value })}
+            placeholder="https://youtube.com/watch?v=..."
+            className="flex-1"
+          />
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleGenerate}
+            disabled={generating || !content.videoUrl?.trim()}
+            className="shrink-0"
+          >
+            {generating ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Generating…</> : <><Sparkles className="h-3 w-3 mr-1" />Generate</>}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">AI will generate an exciting description of what students will learn.</p>
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">Description text</label>
+        <Textarea
+          value={content.text || ""}
+          onChange={(e) => onChange({ ...content, text: e.target.value })}
+          placeholder="AI-generated description will appear here. You can also write your own."
+          className="min-h-[120px]"
+        />
+        <p className="text-xs text-muted-foreground mt-1">Edit the generated text to match your style. Your edits help the AI learn how you communicate.</p>
+      </div>
+    </div>
+  );
+}
+
 // =================== BLOCK PREVIEW ===================
 
 function BlockPreview({ block }: { block: Block }) {
@@ -756,8 +856,19 @@ function BlockPreview({ block }: { block: Block }) {
       return content.url
         ? <div className="flex items-center gap-3"><img src={content.url} alt={content.alt} className="h-16 w-24 object-cover rounded" /><span className="text-xs text-muted-foreground">{content.caption || content.alt || "Image"}</span></div>
         : <p className="text-sm text-muted-foreground italic">No image URL set</p>;
-    case "VIDEO":
-      return <p className="text-sm text-muted-foreground truncate">{content.url ? `Video: ${content.url}` : "No video URL set"}</p>;
+    case "VIDEO": {
+      const ytThumb = content.url ? getYouTubeThumbnail(content.url) : null;
+      return content.url
+        ? <div className="flex items-center gap-3">
+            {ytThumb && <img src={ytThumb} alt="thumbnail" className="h-12 w-20 object-cover rounded" />}
+            <div className="min-w-0">
+              <p className="text-xs font-medium truncate">{getYouTubeTitle(content.url) || "Video"}</p>
+              <p className="text-xs text-muted-foreground truncate">{content.url}</p>
+              {content.duration && <p className="text-xs text-muted-foreground">{content.duration} min</p>}
+            </div>
+          </div>
+        : <p className="text-sm text-muted-foreground italic">No video URL set</p>;
+    }
     case "QUOTE":
       return content.text
         ? <blockquote className="border-l-4 border-primary pl-3 text-sm italic line-clamp-2">"{content.text}" {content.author ? `— ${content.author}` : ""}</blockquote>
@@ -805,6 +916,13 @@ function BlockPreview({ block }: { block: Block }) {
           <span className="text-xs font-medium text-muted-foreground">{content.label || "My Notes"} — student notes section</span>
         </div>
       );
+    case "VIDEO_DESCRIPTION":
+      return content.text
+        ? <div className="space-y-1">
+            {content.videoUrl && <p className="text-xs text-muted-foreground truncate">📹 {content.videoUrl}</p>}
+            <p className="text-sm line-clamp-3">{content.text}</p>
+          </div>
+        : <p className="text-sm text-muted-foreground italic">No description yet — click edit to generate with AI</p>;
     default:
       return <p className="text-sm text-muted-foreground italic">{block.type}</p>;
   }
@@ -821,6 +939,17 @@ function BlockEditorPanel({ block, onSave, onClose }: { block: Block; onSave: (c
     onSave(localContent);
     onClose();
   };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [localContent]);
 
   const renderEditor = () => {
     switch (block.type) {
@@ -846,6 +975,7 @@ function BlockEditorPanel({ block, onSave, onClose }: { block: Block; onSave: (c
       case "DIVIDER": return <DividerEditor content={localContent} onChange={setLocalContent} />;
       case "NEXT_BUTTON": return <NextButtonEditor content={localContent} onChange={setLocalContent} />;
       case "NOTES": return <NotesEditor content={localContent} onChange={setLocalContent} />;
+      case "VIDEO_DESCRIPTION": return <VideoDescriptionEditor content={localContent} onChange={setLocalContent} blockId={block.id} />;
       default: return <p className="text-muted-foreground">No editor for {block.type}</p>;
     }
   };
@@ -859,7 +989,7 @@ function BlockEditorPanel({ block, onSave, onClose }: { block: Block; onSave: (c
       <div>{renderEditor()}</div>
       <div className="flex justify-end gap-2 pt-1 border-t">
         <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-        <Button size="sm" onClick={handleSave}>Save Block</Button>
+        <Button size="sm" onClick={handleSave}>Save Block <span className="ml-1 text-xs opacity-60">⌘S</span></Button>
       </div>
     </div>
   );
@@ -1063,7 +1193,9 @@ export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
     },
     onSuccess: (newBlock: Block) => {
       queryClient.invalidateQueries({ queryKey: ["/api/lessons", lessonId, "blocks"] });
-      setEditingBlockId(newBlock.id);
+      if (newBlock.type !== "DIVIDER") {
+        setEditingBlockId(newBlock.id);
+      }
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -1148,12 +1280,25 @@ export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
     setDragOverId(null);
   };
 
-  const handleUndo = () => {
+  const handleUndo = useCallback(() => {
     const prev = history[history.length - 1];
     if (!prev) return;
     setHistory(h => h.slice(0, -1));
     reorderMutation.mutate(prev);
-  };
+  }, [history, reorderMutation]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
+        if (history.length > 0) {
+          e.preventDefault();
+          handleUndo();
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [history, handleUndo]);
 
   const handleMove = (id: number, direction: "up" | "down") => {
     const sorted = [...blocks].sort((a, b) => a.position - b.position);
