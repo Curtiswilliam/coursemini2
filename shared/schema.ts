@@ -511,6 +511,15 @@ export const moduleBlocks = pgTable("module_blocks", {
 export type ModuleBlock = typeof moduleBlocks.$inferSelect;
 export type InsertModuleBlock = typeof moduleBlocks.$inferInsert;
 
+export const courseNotes = pgTable("course_notes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  courseId: integer("course_id").references(() => courses.id, { onDelete: "cascade" }).notNull(),
+  lessonId: integer("lesson_id").references(() => lessons.id, { onDelete: "cascade" }), // null = course summary
+  content: text("content").notNull().default(""),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertCategorySchema = createInsertSchema(categories).omit({ id: true });

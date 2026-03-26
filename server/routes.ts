@@ -2388,6 +2388,83 @@ Return ONLY the description text, no quotes, no preamble.`,
     }
   });
 
+  // ─── Course Notes ─────────────────────────────────────────────────────────────
+  app.get("/api/courses/:courseId/notes", requireAuth, async (req: any, res) => {
+    try {
+      const courseId = parseIdParam(req.params.courseId);
+      if (!courseId) return res.status(400).json({ message: "Invalid course ID" });
+      const notes = await storage.getCourseNotes(req.session.userId!, courseId);
+      res.json(notes);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.put("/api/courses/:courseId/notes", requireAuth, async (req: any, res) => {
+    try {
+      const courseId = parseIdParam(req.params.courseId);
+      if (!courseId) return res.status(400).json({ message: "Invalid course ID" });
+      const { lessonId, content } = req.body;
+      const note = await storage.upsertCourseNote(req.session.userId!, courseId, lessonId ?? null, content ?? "");
+      res.json(note);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.delete("/api/notes/:id", requireAuth, async (req: any, res) => {
+    try {
+      const noteId = parseIdParam(req.params.id);
+      if (!noteId) return res.status(400).json({ message: "Invalid note ID" });
+      await storage.deleteCourseNote(noteId, req.session.userId!);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // ─── Video Info ───────────────────────────────────────────────────────────────
+  app.get("/api/video-info", async (req: any, res) => {
+    try {
+      const url = req.query.url as string;
+      if (!url) return res.status(400).json({ message: "url required" });
+      const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+      const loomMatch = url.match(/loom\.com\/share\/([a-zA-Z0-9]+)/);
+      if (ytMatch) {
+        const videoId = ytMatch[1];
+        const ytKey = process.env.YOUTUBE_API_KEY;
+        if (ytKey) {
+          try {
+            const apiRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=snippet,contentDetails&key=${ytKey}`);
+            const data = await apiRes.json();
+            const item = data.items?.[0];
+            if (item) {
+              const dur = item.contentDetails?.duration || "";
+              const hMatch = dur.match(/(\d+)H/); const mMatch = dur.match(/(\d+)M/); const sMatch = dur.match(/(\d+)S/);
+              const totalSeconds = (hMatch ? parseInt(hMatch[1]) * 3600 : 0) + (mMatch ? parseInt(mMatch[1]) * 60 : 0) + (sMatch ? parseInt(sMatch[1]) : 0);
+              return res.json({ title: item.snippet?.title, thumbnailUrl: item.snippet?.thumbnails?.medium?.url || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`, durationSeconds: totalSeconds, durationMinutes: Math.ceil(totalSeconds / 60) });
+            }
+          } catch {}
+        }
+        try {
+          const oembed = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+          const data = await oembed.json();
+          return res.json({ title: data.title, thumbnailUrl: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`, durationSeconds: null, durationMinutes: null });
+        } catch {}
+      }
+      if (loomMatch) {
+        try {
+          const oembed = await fetch(`https://www.loom.com/v1/oembed?url=${encodeURIComponent(url)}`);
+          const data = await oembed.json();
+          return res.json({ title: data.title, thumbnailUrl: data.thumbnail_url, durationSeconds: null, durationMinutes: null });
+        } catch {}
+      }
+      res.json({ title: null, thumbnailUrl: null, durationSeconds: null, durationMinutes: null });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   // ========== WAITLIST ==========
   app.post("/api/courses/:id/waitlist", requireAuth, async (req, res) => {
     try {

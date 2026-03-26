@@ -36,6 +36,7 @@ import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 import LandingPage from "@/pages/landing-page";
 import AdminWebhooks from "@/pages/admin/webhooks";
+import MyNotesPage from "@/pages/my-notes";
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -102,6 +103,7 @@ function PublicRouter() {
           <Route path="/bundles" component={BundlesPage} />
           <Route path="/certificates/:code" component={CertificatePage} />
           <Route path="/lp/:slug" component={LandingPage} />
+          <Route path="/my-notes" component={MyNotesPage} />
           <Route component={NotFound} />
         </Switch>
       </main>

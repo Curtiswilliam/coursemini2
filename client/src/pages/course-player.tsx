@@ -311,10 +311,10 @@ export default function CoursePlayer() {
   const [quizSubmitting, setQuizSubmitting] = useState(false);
   const [kcAllAnswered, setKcAllAnswered] = useState(true);
 
-  // Notes & bookmarks state
+  // Notes state
   const [notesOpen, setNotesOpen] = useState(false);
-  const [noteContent, setNoteContent] = useState("");
-  const [noteSaveStatus, setNoteSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
+  const [notesNavOpen, setNotesNavOpen] = useState(false);
+  const [notesLessonId, setNotesLessonId] = useState<number | null>(null);
   const noteSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Lesson timer
@@ -392,21 +392,20 @@ export default function CoursePlayer() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const saveNoteMutation = useMutation({
-    mutationFn: async (content: string) => {
-      await apiRequest("PUT", `/api/lessons/${currentLessonId}/note`, { content });
-    },
-    onSuccess: () => {
-      setNoteSaveStatus("saved");
-      queryClient.invalidateQueries({ queryKey: ["/api/lessons", currentLessonId, "note"] });
-    },
-    onError: () => setNoteSaveStatus("unsaved"),
-  });
-
   const course = courseData?.course;
   const enrollment = courseData?.enrollment;
   const isPreview = courseData?.isPreview ?? false;
   const progressMap = courseData?.progressMap || {};
+
+  const { data: allNotes = [] } = useQuery<any[]>({
+    queryKey: ["/api/courses", course?.id, "notes"],
+    queryFn: async () => {
+      if (!course?.id) return [];
+      const res = await fetch(`/api/courses/${course.id}/notes`, { credentials: "include" });
+      return res.json();
+    },
+    enabled: !!course?.id && !!enrollment,
+  });
 
   const allLessons = course?.subjects
     ?.sort((a: any, b: any) => a.position - b.position)
@@ -465,6 +464,10 @@ export default function CoursePlayer() {
     }
   }, [currentLessonId, course?.id]);
 
+  useEffect(() => {
+    setNotesLessonId(currentLessonId);
+  }, [currentLessonId]);
+
   const currentLesson = allLessons.find((l: any) => l.id === currentLessonId);
   const hasNextButtonBlock = lessonBlocks.some((b: any) => b.type === "NEXT_BUTTON");
   const hasNotesBlock = lessonBlocks.some((b: any) => b.type === "NOTES");
@@ -478,19 +481,8 @@ export default function CoursePlayer() {
   useEffect(() => {
     setQuizAnswers({});
     setQuizResult(null);
-    setNoteContent("");
-    setNoteSaveStatus("saved");
     setKcAllAnswered(true);
   }, [currentLessonId]);
-
-  // Load note content when noteData changes
-  useEffect(() => {
-    if (noteData?.content !== undefined) {
-      setNoteContent(noteData.content || "");
-    } else if (noteData === null) {
-      setNoteContent("");
-    }
-  }, [noteData]);
 
   // Timer: init when lesson changes
   useEffect(() => {
@@ -529,26 +521,6 @@ export default function CoursePlayer() {
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
-
-  const handleNoteChange = (val: string) => {
-    setNoteContent(val);
-    setNoteSaveStatus("unsaved");
-    if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
-    noteSaveTimer.current = setTimeout(() => {
-      if (val.trim()) {
-        setNoteSaveStatus("saving");
-        saveNoteMutation.mutate(val);
-      }
-    }, 1500);
-  };
-
-  const handleNoteBlur = () => {
-    if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
-    if (noteContent.trim() && noteSaveStatus === "unsaved") {
-      setNoteSaveStatus("saving");
-      saveNoteMutation.mutate(noteContent);
-    }
-  };
 
   // Compute scroll depth — called on scroll events and also after lesson renders
   const handleContentScroll = useCallback(() => {
@@ -703,6 +675,22 @@ export default function CoursePlayer() {
       queryClient.invalidateQueries({ queryKey: ["/api/enrollments"] });
     },
   });
+
+  const upsertNoteMutation = useMutation({
+    mutationFn: async ({ lessonId, content }: { lessonId: number | null; content: string }) => {
+      await apiRequest("PUT", `/api/courses/${course?.id}/notes`, { lessonId, content });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/courses", course?.id, "notes"] });
+    },
+  });
+
+  const handleNoteChange = (lessonId: number | null, content: string) => {
+    if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
+    noteSaveTimer.current = setTimeout(() => {
+      upsertNoteMutation.mutate({ lessonId, content });
+    }, 1000);
+  };
 
   const completeAndAdvance = (lessonId: number) => {
     completeMutation.mutate(lessonId, {
@@ -928,6 +916,17 @@ export default function CoursePlayer() {
                     )}
                     {enrollment && (
                       <Button
+                        variant={notesOpen ? "secondary" : "ghost"}
+                        size="sm"
+                        className="shrink-0 mt-0.5 gap-1.5 text-xs h-8"
+                        onClick={() => setNotesOpen(!notesOpen)}
+                      >
+                        <StickyNote className="h-3.5 w-3.5" />
+                        My Notes
+                      </Button>
+                    )}
+                    {enrollment && (
+                      <Button
                         variant="ghost"
                         size="icon"
                         className="shrink-0 mt-0.5"
@@ -1105,11 +1104,6 @@ export default function CoursePlayer() {
                           onPrev: prevLesson ? () => setCurrentLessonId(prevLesson.id) : undefined,
                           nextDisabled: !kcAllAnswered,
                         } : undefined}
-                        noteState={hasNotesBlock && enrollment ? {
-                          content: noteContent,
-                          onChange: handleNoteChange,
-                          saveStatus: noteSaveStatus,
-                        } : undefined}
                       />
                     </div>
                   ) : currentLesson.content ? (
@@ -1127,37 +1121,59 @@ export default function CoursePlayer() {
                 </>
               )}
 
-              {/* Notes Panel */}
-              {enrollment && currentLessonAvailable && !hasNotesBlock && (
-                <div className="mt-8 border rounded-md overflow-hidden">
-                  <button
-                    className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"
-                    onClick={() => setNotesOpen(!notesOpen)}
-                  >
-                    <span className="flex items-center gap-2">
-                      <StickyNote className="h-4 w-4 text-muted-foreground" />
-                      My Notes
-                      {noteContent && <Badge variant="secondary" className="text-xs h-4 px-1">Saved</Badge>}
-                    </span>
-                    {notesOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </button>
-                  {notesOpen && (
-                    <div className="px-4 pb-4 space-y-2 border-t">
-                      <Textarea
-                        className="mt-3 min-h-[120px] text-sm resize-none"
-                        placeholder="Write your notes for this lesson..."
-                        value={noteContent}
-                        onChange={(e) => handleNoteChange(e.target.value)}
-                        onBlur={handleNoteBlur}
-                      />
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Notes auto-save as you type</span>
-                        <span className={noteSaveStatus === "saving" ? "text-amber-500" : noteSaveStatus === "saved" && noteContent ? "text-emerald-500" : ""}>
-                          {noteSaveStatus === "saving" ? "Saving..." : noteSaveStatus === "unsaved" ? "Unsaved" : noteContent ? "Saved" : ""}
-                        </span>
-                      </div>
+              {/* Floating Notes Panel */}
+              {notesOpen && enrollment && (
+                <div className="fixed right-4 bottom-4 w-80 z-50 shadow-2xl rounded-xl border bg-card flex flex-col overflow-hidden" style={{ maxHeight: "480px" }}>
+                  {/* Header */}
+                  <div className="flex items-center gap-2 px-3 py-2 border-b bg-card shrink-0">
+                    <StickyNote className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <button
+                      className="text-xs font-medium flex-1 truncate text-left hover:text-primary transition-colors"
+                      onClick={() => setNotesNavOpen(!notesNavOpen)}
+                    >
+                      {notesLessonId
+                        ? (() => { const l = allLessons.find((x: any) => x.id === notesLessonId); return l ? `${l.moduleTitle || ""} › ${l.title}` : "Notes"; })()
+                        : `${course?.title} — Summary`}
+                    </button>
+                    <Button variant="ghost" size="sm" className="h-6 text-[10px] px-1.5 shrink-0" onClick={() => navigate("/my-notes")}>Full notepad</Button>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setNotesOpen(false)}><X className="h-3 w-3" /></Button>
+                  </div>
+
+                  {/* Lesson navigation dropdown */}
+                  {notesNavOpen && (
+                    <div className="border-b bg-muted/30 shrink-0 overflow-y-auto" style={{ maxHeight: "180px" }}>
+                      <button
+                        className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted transition-colors ${!notesLessonId ? "text-primary font-medium" : "text-muted-foreground"}`}
+                        onClick={() => { setNotesLessonId(null); setNotesNavOpen(false); }}
+                      >
+                        Course Summary
+                      </button>
+                      {allLessons.map((lesson: any) => (
+                        <button
+                          key={lesson.id}
+                          className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted transition-colors ${notesLessonId === lesson.id ? "text-primary font-medium bg-primary/5" : "text-muted-foreground"}`}
+                          onClick={() => { setNotesLessonId(lesson.id); setNotesNavOpen(false); }}
+                        >
+                          <span className="text-[10px] text-muted-foreground/60 block">{lesson.moduleTitle}</span>
+                          {lesson.title}
+                        </button>
+                      ))}
                     </div>
                   )}
+
+                  {/* Textarea */}
+                  <div className="flex-1 p-2 overflow-hidden flex flex-col min-h-0">
+                    <textarea
+                      className="flex-1 w-full resize-none text-sm bg-transparent outline-none p-1 min-h-[200px]"
+                      placeholder={notesLessonId ? "Type your notes for this lesson…" : "Add a course summary note…"}
+                      value={(() => { const n = allNotes.find((x: any) => notesLessonId ? x.lessonId === notesLessonId : !x.lessonId); return n?.content || ""; })()}
+                      onChange={(e) => handleNoteChange(notesLessonId, e.target.value)}
+                    />
+                  </div>
+
+                  <div className="px-3 py-1.5 border-t shrink-0">
+                    <span className="text-[10px] text-muted-foreground">{upsertNoteMutation.isPending ? "Saving…" : "Auto-saved"}</span>
+                  </div>
                 </div>
               )}
 

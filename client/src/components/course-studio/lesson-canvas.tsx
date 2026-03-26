@@ -511,7 +511,14 @@ function QuizBuilder({
   };
 
   const updateQuestion = (qi: number, field: string, value: any) => {
-    onChange(questions.map((q, i) => i === qi ? { ...q, [field]: value } : q));
+    onChange(questions.map((q, i) => {
+      if (i !== qi) return q;
+      const updated = { ...q, [field]: value };
+      if (field === "type" && value === "MULTI_SELECTION" && !q.selectionLabel) {
+        updated.selectionLabel = "Select all that apply";
+      }
+      return updated;
+    }));
   };
 
   const removeQuestion = (qi: number) => {

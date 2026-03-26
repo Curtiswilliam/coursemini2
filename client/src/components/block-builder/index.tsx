@@ -241,8 +241,26 @@ function getYouTubeTitle(url: string): string | null {
 
 function VideoEditor({ content, onChange }: { content: any; onChange: (c: any) => void }) {
   const [mode, setMode] = useState<"url" | "embed">(content.embedCode ? "embed" : "url");
-  const thumbnail = mode === "url" && content.url ? getYouTubeThumbnail(content.url) : null;
-  const videoLabel = mode === "url" && content.url ? getYouTubeTitle(content.url) : null;
+  const [fetching, setFetching] = useState(false);
+  const fetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const url = content.url;
+    if (!url || mode !== "url") return;
+    if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
+    fetchTimeoutRef.current = setTimeout(async () => {
+      setFetching(true);
+      try {
+        const res = await fetch(`/api/video-info?url=${encodeURIComponent(url)}`, { credentials: "include" });
+        const data = await res.json();
+        if (data.title || data.thumbnailUrl) {
+          onChange({ ...content, url, _title: data.title || undefined, _thumbnail: data.thumbnailUrl || undefined, duration: data.durationMinutes || content.duration });
+        }
+      } catch {}
+      setFetching(false);
+    }, 800);
+    return () => { if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current); };
+  }, [content.url, mode]);
 
   return (
     <div className="space-y-3">
@@ -252,14 +270,17 @@ function VideoEditor({ content, onChange }: { content: any; onChange: (c: any) =
       </div>
       {mode === "url" ? (
         <>
-          <Input value={content.url || ""} onChange={(e) => onChange({ ...content, url: e.target.value })} placeholder="YouTube, Vimeo, Loom, or direct video URL" />
-          <p className="text-xs text-muted-foreground">Supports YouTube, Vimeo, Loom (loom.com/share/...) and direct MP4 links</p>
-          {thumbnail && (
-            <div className="flex items-center gap-3 p-2 bg-muted/40 rounded-lg border border-border">
-              <img src={thumbnail} alt="Video thumbnail" className="h-14 w-24 object-cover rounded" />
+          <div className="relative">
+            <Input value={content.url || ""} onChange={(e) => onChange({ ...content, url: e.target.value, _title: undefined, _thumbnail: undefined })} placeholder="YouTube, Vimeo, Loom, or direct video URL" />
+            {fetching && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground animate-pulse">Fetching…</span>}
+          </div>
+          <p className="text-xs text-muted-foreground">Supports YouTube, Vimeo, Loom and direct MP4 links</p>
+          {(content._thumbnail || content._title) && (
+            <div className="flex items-center gap-3 p-2 bg-muted/40 rounded-lg border">
+              {content._thumbnail && <img src={content._thumbnail} alt="thumbnail" className="h-14 w-24 object-cover rounded shrink-0" />}
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium truncate">{videoLabel || "Video"}</p>
-                <p className="text-xs text-muted-foreground">{content.url}</p>
+                <p className="text-xs font-medium truncate">{content._title || "Video"}</p>
+                {content.duration && <p className="text-xs text-muted-foreground">{content.duration} min</p>}
               </div>
             </div>
           )}
@@ -268,19 +289,6 @@ function VideoEditor({ content, onChange }: { content: any; onChange: (c: any) =
         <Textarea value={content.embedCode || ""} onChange={(e) => onChange({ ...content, embedCode: e.target.value })} placeholder="Paste embed code (e.g. <iframe ...>)" className="min-h-[80px] font-mono text-xs" />
       )}
       <Input value={content.caption || ""} onChange={(e) => onChange({ ...content, caption: e.target.value })} placeholder="Caption (optional)" />
-      <div className="flex items-center gap-2">
-        <label className="text-xs text-muted-foreground shrink-0">Video duration (min):</label>
-        <Input
-          type="number"
-          min="0"
-          step="0.5"
-          value={content.duration || ""}
-          onChange={(e) => onChange({ ...content, duration: e.target.value ? parseFloat(e.target.value) : undefined })}
-          placeholder="e.g. 5"
-          className="h-7 text-xs w-20"
-        />
-        <span className="text-xs text-muted-foreground">Used to auto-calculate lesson duration</span>
-      </div>
     </div>
   );
 }
@@ -857,17 +865,18 @@ function BlockPreview({ block }: { block: Block }) {
         ? <div className="flex items-center gap-3"><img src={content.url} alt={content.alt} className="h-16 w-24 object-cover rounded" /><span className="text-xs text-muted-foreground">{content.caption || content.alt || "Image"}</span></div>
         : <p className="text-sm text-muted-foreground italic">No image URL set</p>;
     case "VIDEO": {
-      const ytThumb = content.url ? getYouTubeThumbnail(content.url) : null;
-      return content.url
+      const thumb = content._thumbnail || (content.url ? getYouTubeThumbnail(content.url) : null);
+      const title = content._title || (content.url ? getYouTubeTitle(content.url) : null);
+      return (content.url || content.embedCode)
         ? <div className="flex items-center gap-3">
-            {ytThumb && <img src={ytThumb} alt="thumbnail" className="h-12 w-20 object-cover rounded" />}
+            {thumb && <img src={thumb} alt="thumbnail" className="h-12 w-20 object-cover rounded shrink-0" />}
             <div className="min-w-0">
-              <p className="text-xs font-medium truncate">{getYouTubeTitle(content.url) || "Video"}</p>
-              <p className="text-xs text-muted-foreground truncate">{content.url}</p>
+              <p className="text-xs font-medium truncate">{title || (content.embedCode ? "Embed video" : "Video")}</p>
+              {content.url && <p className="text-xs text-muted-foreground truncate">{content.url}</p>}
               {content.duration && <p className="text-xs text-muted-foreground">{content.duration} min</p>}
             </div>
           </div>
-        : <p className="text-sm text-muted-foreground italic">No video URL set</p>;
+        : <p className="text-sm text-muted-foreground italic">No video set</p>;
     }
     case "QUOTE":
       return content.text

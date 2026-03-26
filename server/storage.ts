@@ -11,7 +11,7 @@ import {
   emailCampaigns, campaignSends, coursePathways, pathwaySteps, userPathwayProgress,
   userBadges, activityEvents,
   emailTemplateCategories, emailTemplates, emailAutomations,
-  lessonNotes, lessonBookmarks, courseWaitlist, webhooks, webhookDeliveries,
+  lessonNotes, lessonBookmarks, courseWaitlist, webhooks, webhookDeliveries, courseNotes,
   type InsertUser, type User,
   type InsertCourse, type Course,
   type InsertCategory, type Category,
@@ -190,6 +190,11 @@ export interface IStorage {
   getLessonBookmark(userId: number, lessonId: number): Promise<any>;
   toggleLessonBookmark(userId: number, lessonId: number): Promise<boolean>;
   getUserBookmarks(userId: number): Promise<any[]>;
+
+  // Course Notes
+  getCourseNotes(userId: number, courseId: number): Promise<any[]>;
+  upsertCourseNote(userId: number, courseId: number, lessonId: number | null, content: string): Promise<any>;
+  deleteCourseNote(id: number, userId: number): Promise<void>;
 
   // Waitlist
   joinWaitlist(userId: number, courseId: number): Promise<void>;
@@ -1186,6 +1191,30 @@ export class DatabaseStorage implements IStorage {
     const passed = score >= 70;
     await db.insert(quizAttempts).values({ userId, quizId, score, passed });
     return { score, passed, correct, total: questions.length };
+  }
+
+  // ─── Course Notes ─────────────────────────────────────────────────────────────
+
+  async getCourseNotes(userId: number, courseId: number): Promise<any[]> {
+    return db.select().from(courseNotes)
+      .where(and(eq(courseNotes.userId, userId), eq(courseNotes.courseId, courseId)))
+      .orderBy(asc(courseNotes.lessonId));
+  }
+
+  async upsertCourseNote(userId: number, courseId: number, lessonId: number | null, content: string): Promise<any> {
+    const existing = lessonId !== null
+      ? await db.select().from(courseNotes).where(and(eq(courseNotes.userId, userId), eq(courseNotes.lessonId, lessonId)))
+      : await db.select().from(courseNotes).where(and(eq(courseNotes.userId, userId), eq(courseNotes.courseId, courseId), isNull(courseNotes.lessonId)));
+    if (existing.length > 0) {
+      const [updated] = await db.update(courseNotes).set({ content, updatedAt: new Date() }).where(eq(courseNotes.id, existing[0].id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(courseNotes).values({ userId, courseId, lessonId, content }).returning();
+    return created;
+  }
+
+  async deleteCourseNote(id: number, userId: number): Promise<void> {
+    await db.delete(courseNotes).where(and(eq(courseNotes.id, id), eq(courseNotes.userId, userId)));
   }
 
   // ========== AFFILIATES ==========
