@@ -243,7 +243,7 @@ export default function Home() {
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold">How It Works</h2>
             <p className="text-muted-foreground mt-2 max-w-md mx-auto">
-              Getting started is simple. You can be learning in under 1 minute.
+              Getting started is simple. You can be learning in under 2 minutes.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
