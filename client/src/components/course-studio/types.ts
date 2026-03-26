@@ -10,6 +10,7 @@ export interface Lesson {
   minReadSeconds?: number | null;
   minVideoPercent?: number | null;
   minQuizScore?: number | null;
+  blockNextModule?: boolean | null;
   quiz?: {
     questions: QuizQuestion[];
   };
@@ -18,8 +19,9 @@ export interface Lesson {
 export interface QuizQuestion {
   id?: number;
   question: string;
-  type: "MULTIPLE_CHOICE" | "TRUE_FALSE";
+  type: "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SINGLE_SELECTION" | "MULTI_SELECTION";
   position: number;
+  selectionLabel?: string;
   options: QuizOption[];
 }
 
@@ -33,6 +35,8 @@ export interface Module {
   id: number;
   subjectId: number;
   title: string;
+  description?: string | null;
+  heroImage?: string | null;
   position: number;
   lessons: Lesson[];
 }

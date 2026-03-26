@@ -29,9 +29,10 @@ interface LessonCanvasProps {
 
 interface QuizState {
   question: string;
-  type: "MULTIPLE_CHOICE" | "TRUE_FALSE";
+  type: "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SINGLE_SELECTION" | "MULTI_SELECTION";
   position: number;
   options: { text: string; isCorrect: boolean }[];
+  selectionLabel?: string;
 }
 
 function SaveBadge({ status }: { status: string }) {
@@ -63,6 +64,7 @@ export function LessonCanvas({ lesson, courseId, onRefresh }: LessonCanvasProps)
   const [minReadSeconds, setMinReadSeconds] = useState(lesson.minReadSeconds?.toString() || "");
   const [minVideoPercent, setMinVideoPercent] = useState(lesson.minVideoPercent?.toString() || "");
   const [minQuizScore, setMinQuizScore] = useState(lesson.minQuizScore?.toString() || "");
+  const [blockNextModule, setBlockNextModule] = useState(lesson.blockNextModule ?? false);
   const [requirementsOpen, setRequirementsOpen] = useState(false);
 
   // AI outline state
@@ -74,8 +76,9 @@ export function LessonCanvas({ lesson, courseId, onRefresh }: LessonCanvasProps)
   const [quizQuestions, setQuizQuestions] = useState<QuizState[]>(
     lesson.quiz?.questions?.map((q) => ({
       question: q.question,
-      type: q.type as "MULTIPLE_CHOICE" | "TRUE_FALSE",
+      type: q.type as "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SINGLE_SELECTION" | "MULTI_SELECTION",
       position: q.position,
+      selectionLabel: (q as any).selectionLabel || undefined,
       options: q.options?.map((o) => ({ text: o.text, isCorrect: o.isCorrect })) || [],
     })) || []
   );
@@ -94,13 +97,15 @@ export function LessonCanvas({ lesson, courseId, onRefresh }: LessonCanvasProps)
       setMinReadSeconds(lesson.minReadSeconds?.toString() || "");
       setMinVideoPercent(lesson.minVideoPercent?.toString() || "");
       setMinQuizScore(lesson.minQuizScore?.toString() || "");
+      setBlockNextModule(lesson.blockNextModule ?? false);
       setRequirementsOpen(false);
       setAiTopic("");
       setQuizQuestions(
         lesson.quiz?.questions?.map((q) => ({
           question: q.question,
-          type: q.type as "MULTIPLE_CHOICE" | "TRUE_FALSE",
+          type: q.type as "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SINGLE_SELECTION" | "MULTI_SELECTION",
           position: q.position,
+          selectionLabel: (q as any).selectionLabel || undefined,
           options: q.options?.map((o) => ({ text: o.text, isCorrect: o.isCorrect })) || [],
         })) || []
       );
@@ -127,7 +132,7 @@ export function LessonCanvas({ lesson, courseId, onRefresh }: LessonCanvasProps)
 
   const suggestedDuration = totalVideoDuration > 0 ? Math.round(totalVideoDuration) : null;
 
-  const saveData = { title, type, videoUrl, duration, dripDays, minReadSeconds, minVideoPercent, minQuizScore };
+  const saveData = { title, type, videoUrl, duration, dripDays, minReadSeconds, minVideoPercent, minQuizScore, blockNextModule };
   const saveDataStr = JSON.stringify(saveData);
 
   const saveMutation = useMutation({
@@ -141,6 +146,7 @@ export function LessonCanvas({ lesson, courseId, onRefresh }: LessonCanvasProps)
         minReadSeconds: data.minReadSeconds ? parseInt(data.minReadSeconds) : null,
         minVideoPercent: data.minVideoPercent ? parseInt(data.minVideoPercent) : null,
         minQuizScore: data.minQuizScore ? parseInt(data.minQuizScore) : null,
+        blockNextModule: data.blockNextModule,
       });
     },
     onSuccess: () => {
@@ -158,6 +164,13 @@ export function LessonCanvas({ lesson, courseId, onRefresh }: LessonCanvasProps)
   );
 
   useEffect(() => { markSaved(); }, [lesson.id, markSaved]);
+
+  // Auto-update duration when quiz questions change
+  useEffect(() => {
+    if (type === "QUIZ" && quizQuestions.length > 0) {
+      setDuration(String(quizQuestions.length));
+    }
+  }, [quizQuestions.length, type]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -333,6 +346,20 @@ export function LessonCanvas({ lesson, courseId, onRefresh }: LessonCanvasProps)
                       />
                     </div>
                   )}
+                  {type === "QUIZ" && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="blockNextModule"
+                        checked={blockNextModule}
+                        onChange={(e) => setBlockNextModule(e.target.checked)}
+                        className="accent-primary h-3.5 w-3.5"
+                      />
+                      <label htmlFor="blockNextModule" className="text-xs text-muted-foreground cursor-pointer">
+                        Block students from next module until this quiz is passed
+                      </label>
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground w-full">
                     Students must meet these thresholds before the lesson counts as complete.
                   </p>
@@ -477,7 +504,7 @@ function QuizBuilder({
   const addQuestion = () => {
     onChange([...questions, {
       question: "",
-      type: "MULTIPLE_CHOICE",
+      type: "SINGLE_SELECTION",
       position: questions.length,
       options: [{ text: "", isCorrect: true }, { text: "", isCorrect: false }],
     }]);
@@ -504,8 +531,8 @@ function QuizBuilder({
         options: q.options.map((o, j) =>
           j === oi
             ? { ...o, [field]: value }
-            : field === "isCorrect" && value
-              ? { ...o, isCorrect: false }
+            : field === "isCorrect" && value && q.type !== "MULTI_SELECTION"
+              ? { ...o, isCorrect: false }  // Only clear others for single selection
               : o
         ),
       }
@@ -545,12 +572,12 @@ function QuizBuilder({
               className="flex-1 text-sm"
             />
             <Select value={q.type} onValueChange={(v) => updateQuestion(qi, "type", v)}>
-              <SelectTrigger className="w-36 h-8 text-xs">
+              <SelectTrigger className="w-40 h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="MULTIPLE_CHOICE">Multiple Choice</SelectItem>
-                <SelectItem value="TRUE_FALSE">True / False</SelectItem>
+                <SelectItem value="SINGLE_SELECTION">Single Selection</SelectItem>
+                <SelectItem value="MULTI_SELECTION">Multi Selection</SelectItem>
               </SelectContent>
             </Select>
             <Button
@@ -566,13 +593,22 @@ function QuizBuilder({
           <div className="space-y-1.5 pl-8">
             {q.options.map((opt, oi) => (
               <div key={oi} className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name={`q${qi}-correct`}
-                  checked={opt.isCorrect}
-                  onChange={() => updateOption(qi, oi, "isCorrect", true)}
-                  className="shrink-0 accent-primary"
-                />
+                {q.type === "MULTI_SELECTION" ? (
+                  <input
+                    type="checkbox"
+                    checked={opt.isCorrect}
+                    onChange={(e) => updateOption(qi, oi, "isCorrect", e.target.checked)}
+                    className="shrink-0 accent-primary"
+                  />
+                ) : (
+                  <input
+                    type="radio"
+                    name={`q${qi}-correct`}
+                    checked={opt.isCorrect}
+                    onChange={() => updateOption(qi, oi, "isCorrect", true)}
+                    className="shrink-0 accent-primary"
+                  />
+                )}
                 <Input
                   value={opt.text}
                   onChange={(e) => updateOption(qi, oi, "text", e.target.value)}
@@ -592,13 +628,24 @@ function QuizBuilder({
                 )}
               </div>
             ))}
-            {q.type === "MULTIPLE_CHOICE" && q.options.length < 6 && (
+            {(q.type === "SINGLE_SELECTION" || q.type === "MULTI_SELECTION") && q.options.length < 6 && (
               <button
                 onClick={() => addOption(qi)}
                 className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 pl-6 mt-1"
               >
                 <Plus className="h-3 w-3" /> Add option
               </button>
+            )}
+            {q.type === "MULTI_SELECTION" && (
+              <div className="pl-6 mt-1.5">
+                <Input
+                  value={q.selectionLabel || ""}
+                  onChange={(e) => updateQuestion(qi, "selectionLabel", e.target.value)}
+                  placeholder='Description shown to students e.g. "Select all that apply"'
+                  className="h-7 text-xs text-muted-foreground"
+                />
+                <p className="text-[10px] text-muted-foreground mt-0.5">This description is shown below the options to students</p>
+              </div>
             )}
           </div>
         </div>

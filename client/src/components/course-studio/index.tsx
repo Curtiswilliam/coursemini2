@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { StudioTopbar } from "./studio-topbar";
 import { CourseOutlinePanel } from "./course-outline-panel";
 import { LessonCanvas } from "./lesson-canvas";
+import { ModuleCanvas } from "./module-canvas";
 import { CourseDetailsPanel } from "./course-details-panel";
 import { SaveStatus } from "@/hooks/use-auto-save";
 import { Course, Lesson, StudioTab } from "./types";
@@ -26,6 +27,16 @@ function findLesson(course: Course | undefined, lessonId: number | null): Lesson
   return null;
 }
 
+function findModule(course: Course | undefined, moduleId: number | null): any | null {
+  if (!course || moduleId === null) return null;
+  for (const subject of course.subjects || []) {
+    for (const mod of subject.modules || []) {
+      if (mod.id === moduleId) return mod;
+    }
+  }
+  return null;
+}
+
 export default function CourseStudio() {
   const [, editParams] = useRoute("/admin/courses/:id/edit");
   const [, navigate] = useLocation();
@@ -35,6 +46,7 @@ export default function CourseStudio() {
   const courseId = editParams?.id ? parseInt(editParams.id) : null;
 
   const [selectedLessonId, setSelectedLessonId] = useState<number | null>(null);
+  const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<StudioTab>("content");
   const [courseAutoSaveStatus, setCourseAutoSaveStatus] = useState<SaveStatus>("saved");
   const handleCourseStatusChange = (s: string) => setCourseAutoSaveStatus(s as SaveStatus);
@@ -164,6 +176,7 @@ export default function CourseStudio() {
   }
 
   const selectedLesson = findLesson(course, selectedLessonId);
+  const selectedModule = findModule(course, selectedModuleId);
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
@@ -189,7 +202,8 @@ export default function CourseStudio() {
               courseId={course.id}
               subjects={course.subjects || []}
               selectedLessonId={selectedLessonId}
-              onSelectLesson={setSelectedLessonId}
+              onSelectLesson={(id) => { setSelectedLessonId(id); setSelectedModuleId(null); }}
+              onSelectModule={(id) => { setSelectedModuleId(id); setSelectedLessonId(null); }}
               onRefresh={() => refetch()}
             />
           </div>
@@ -198,7 +212,14 @@ export default function CourseStudio() {
         {/* Right panel */}
         <div className="flex-1 overflow-hidden flex flex-col">
           {activeTab === "content" ? (
-            selectedLesson ? (
+            selectedModule ? (
+              <ModuleCanvas
+                key={selectedModule.id}
+                module={selectedModule}
+                courseId={course.id}
+                onRefresh={() => refetch()}
+              />
+            ) : selectedLesson ? (
               <LessonCanvas
                 key={selectedLesson.id}
                 lesson={selectedLesson}
@@ -209,7 +230,6 @@ export default function CourseStudio() {
               <EmptyCanvas
                 hasSections={(course.subjects?.length || 0) > 0}
                 onAddSection={() => {
-                  // Trigger outline panel add section
                   queryClient.invalidateQueries({ queryKey: ["/api/admin/courses", courseId] });
                 }}
               />

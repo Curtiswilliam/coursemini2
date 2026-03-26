@@ -1406,6 +1406,75 @@ Return ONLY the description text, no quotes, no preamble.`,
     }
   });
 
+  // ─── Module Blocks ────────────────────────────────────────────────────────────
+  app.get("/api/modules/:id/blocks", requireAdmin, async (req: any, res) => {
+    try {
+      const moduleId = parseIdParam(req.params.id);
+      if (moduleId === null) return res.status(400).json({ message: "Invalid ID" });
+      const blocks = await storage.getModuleBlocks(moduleId);
+      res.json(blocks);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/modules/:id/blocks", requireAdmin, async (req: any, res) => {
+    try {
+      const moduleId = parseIdParam(req.params.id);
+      if (moduleId === null) return res.status(400).json({ message: "Invalid ID" });
+      const block = await storage.createModuleBlock({ moduleId, ...req.body });
+      res.json(block);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.patch("/api/modules/blocks/:blockId", requireAdmin, async (req: any, res) => {
+    try {
+      const blockId = parseIdParam(req.params.blockId);
+      if (blockId === null) return res.status(400).json({ message: "Invalid ID" });
+      const block = await storage.updateModuleBlock(blockId, req.body);
+      res.json(block);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.delete("/api/modules/blocks/:blockId", requireAdmin, async (req: any, res) => {
+    try {
+      const blockId = parseIdParam(req.params.blockId);
+      if (blockId === null) return res.status(400).json({ message: "Invalid ID" });
+      await storage.deleteModuleBlock(blockId);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/modules/blocks/:blockId/duplicate", requireAdmin, async (req: any, res) => {
+    try {
+      const blockId = parseIdParam(req.params.blockId);
+      if (blockId === null) return res.status(400).json({ message: "Invalid ID" });
+      const block = await storage.duplicateModuleBlock(blockId);
+      res.json(block);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/modules/:id/blocks/reorder", requireAdmin, async (req: any, res) => {
+    try {
+      const moduleId = parseIdParam(req.params.id);
+      if (moduleId === null) return res.status(400).json({ message: "Invalid ID" });
+      const { orderedIds } = req.body;
+      if (!Array.isArray(orderedIds)) return res.status(400).json({ message: "orderedIds required" });
+      await storage.reorderModuleBlocks(moduleId, orderedIds);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.delete("/api/admin/modules/:id", requireAdmin, async (req, res) => {
     try {
       const modId = parseIdParam(req.params.id);

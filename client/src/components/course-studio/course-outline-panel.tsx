@@ -22,6 +22,7 @@ interface OutlinePanelProps {
   subjects: Subject[];
   selectedLessonId: number | null;
   onSelectLesson: (lessonId: number) => void;
+  onSelectModule?: (moduleId: number) => void;
   onRefresh: () => void;
 }
 
@@ -88,16 +89,26 @@ function LessonItem({ lesson, isSelected, onSelect, onDelete, onRename, onDuplic
       ) : (
         <span className="flex-1 truncate text-xs leading-relaxed">{lesson.title}</span>
       )}
-      {blockCount !== undefined && (
-        <span className={cn(
-          "text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0",
-          blockCount === 0
-            ? "bg-muted text-muted-foreground"
-            : "bg-primary/10 text-primary"
-        )}>
-          {blockCount === 0 ? "Empty" : `${blockCount}`}
-        </span>
-      )}
+      {(() => {
+        let displayCount: number | undefined;
+        let isEmpty: boolean;
+        if (lesson.type === "QUIZ") {
+          displayCount = lesson.quiz?.questions?.length || 0;
+          isEmpty = displayCount === 0;
+        } else {
+          displayCount = blockCount;
+          isEmpty = blockCount === 0;
+        }
+        if (displayCount === undefined) return null;
+        return (
+          <span className={cn(
+            "text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0",
+            isEmpty ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"
+          )}>
+            {isEmpty ? "Empty" : lesson.type === "QUIZ" ? `${displayCount}Q` : `${displayCount}`}
+          </span>
+        );
+      })()}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
@@ -131,6 +142,7 @@ export function CourseOutlinePanel({
   subjects,
   selectedLessonId,
   onSelectLesson,
+  onSelectModule,
   onRefresh,
 }: OutlinePanelProps) {
   const [expandedSubjects, setExpandedSubjects] = useState<Set<number>>(
@@ -359,6 +371,7 @@ export function CourseOutlinePanel({
                           onAddLesson={() =>
                             addLesson.mutate({ moduleId: mod.id, position: sortedLessons.length })
                           }
+                          onSelectModule={onSelectModule ? () => onSelectModule(mod.id) : undefined}
                         />
 
                         {/* Lessons */}
@@ -533,6 +546,7 @@ function ModuleRow({
   onRename,
   onDelete,
   onAddLesson,
+  onSelectModule,
 }: {
   mod: { id: number; title: string };
   isExpanded: boolean;
@@ -540,6 +554,7 @@ function ModuleRow({
   onRename: (title: string) => void;
   onDelete: () => void;
   onAddLesson: () => void;
+  onSelectModule?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(mod.title);
@@ -576,6 +591,15 @@ function ModuleRow({
         </span>
       )}
       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
+        {onSelectModule && (
+          <button
+            className="opacity-0 group-hover:opacity-100 h-5 px-1.5 text-[10px] rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+            onClick={(e) => { e.stopPropagation(); onSelectModule(); }}
+            title="Edit module page"
+          >
+            Page
+          </button>
+        )}
         <button
           className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground"
           onClick={onAddLesson}

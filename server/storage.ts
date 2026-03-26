@@ -7,7 +7,7 @@ import {
   studentGroups, studentGroupMembers,
   quizzes, quizQuestions, quizOptions, quizAttempts,
   affiliates, affiliateReferrals, notifications,
-  lessonBlocks, emailVerifications, phoneVerifications, passwordResetTokens,
+  lessonBlocks, moduleBlocks, emailVerifications, phoneVerifications, passwordResetTokens,
   emailCampaigns, campaignSends, coursePathways, pathwaySteps, userPathwayProgress,
   userBadges, activityEvents,
   emailTemplateCategories, emailTemplates, emailAutomations,
@@ -107,6 +107,13 @@ export interface IStorage {
   deleteLessonBlock(id: number): Promise<void>;
   reorderLessonBlocks(lessonId: number, orderedIds: number[]): Promise<void>;
   duplicateLessonBlock(id: number): Promise<LessonBlock>;
+
+  getModuleBlocks(moduleId: number): Promise<any[]>;
+  createModuleBlock(data: { moduleId: number; type: string; content: string; position: number; settings: string }): Promise<any>;
+  updateModuleBlock(id: number, data: Partial<any>): Promise<any>;
+  deleteModuleBlock(id: number): Promise<void>;
+  reorderModuleBlocks(moduleId: number, orderedIds: number[]): Promise<void>;
+  duplicateModuleBlock(id: number): Promise<any>;
 
   // Email Campaigns
   getCampaigns(): Promise<EmailCampaign[]>;
@@ -1127,7 +1134,7 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async upsertQuiz(lessonId: number, questions: Array<{ question: string; type: string; position: number; options: Array<{ text: string; isCorrect: boolean }> }>): Promise<void> {
+  async upsertQuiz(lessonId: number, questions: Array<{ question: string; type: string; position: number; selectionLabel?: string | null; options: Array<{ text: string; isCorrect: boolean }> }>): Promise<void> {
     let [quiz] = await db.select().from(quizzes).where(eq(quizzes.lessonId, lessonId));
     if (!quiz) {
       const [created] = await db.insert(quizzes).values({ lessonId }).returning();
@@ -1147,6 +1154,7 @@ export class DatabaseStorage implements IStorage {
         question: q.question,
         type: q.type as any,
         position: q.position,
+        selectionLabel: (q as any).selectionLabel || null,
       }).returning();
       for (const opt of q.options) {
         await db.insert(quizOptions).values({ questionId: newQ.id, text: opt.text, isCorrect: opt.isCorrect });
@@ -1154,14 +1162,24 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async submitQuizAttempt(userId: number, quizId: number, answers: Record<number, number>): Promise<{ score: number; passed: boolean; correct: number; total: number }> {
+  async submitQuizAttempt(userId: number, quizId: number, answers: Record<number, number | number[]>): Promise<{ score: number; passed: boolean; correct: number; total: number }> {
     const questions = await db.select().from(quizQuestions).where(eq(quizQuestions.quizId, quizId));
     let correct = 0;
     for (const q of questions) {
-      const selectedOptionId = answers[q.id];
-      if (selectedOptionId) {
-        const [opt] = await db.select().from(quizOptions).where(eq(quizOptions.id, selectedOptionId));
-        if (opt?.isCorrect) correct++;
+      const selectedAnswer = answers[q.id];
+      const allOptions = await db.select().from(quizOptions).where(eq(quizOptions.questionId, q.id));
+      const correctOptionIds = allOptions.filter(o => o.isCorrect).map(o => o.id);
+
+      if (q.type === "MULTI_SELECTION") {
+        // Multi-select: all correct options must be selected, no incorrect ones
+        const selectedIds: number[] = Array.isArray(selectedAnswer) ? selectedAnswer : (selectedAnswer ? [selectedAnswer as number] : []);
+        const allCorrectSelected = correctOptionIds.every(id => selectedIds.includes(id));
+        const noWrongSelected = selectedIds.every(id => correctOptionIds.includes(id));
+        if (allCorrectSelected && noWrongSelected && selectedIds.length > 0) correct++;
+      } else {
+        // Single select
+        const selectedId = Array.isArray(selectedAnswer) ? selectedAnswer[0] : selectedAnswer;
+        if (selectedId && correctOptionIds.includes(selectedId)) correct++;
       }
     }
     const score = questions.length > 0 ? (correct / questions.length) * 100 : 0;
@@ -1268,6 +1286,44 @@ export class DatabaseStorage implements IStorage {
       settings: block.settings,
     }).returning();
     return created;
+  }
+
+  // ========== MODULE BLOCKS ==========
+  async getModuleBlocks(moduleId: number): Promise<any[]> {
+    return db.select().from(moduleBlocks).where(eq(moduleBlocks.moduleId, moduleId)).orderBy(asc(moduleBlocks.position));
+  }
+
+  async createModuleBlock(data: { moduleId: number; type: string; content: string; position: number; settings: string }): Promise<any> {
+    const [block] = await db.insert(moduleBlocks).values(data as any).returning();
+    return block;
+  }
+
+  async updateModuleBlock(id: number, data: Partial<any>): Promise<any> {
+    const [block] = await db.update(moduleBlocks).set(data).where(eq(moduleBlocks.id, id)).returning();
+    return block;
+  }
+
+  async deleteModuleBlock(id: number): Promise<void> {
+    await db.delete(moduleBlocks).where(eq(moduleBlocks.id, id));
+  }
+
+  async reorderModuleBlocks(moduleId: number, orderedIds: number[]): Promise<void> {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.update(moduleBlocks).set({ position: i }).where(eq(moduleBlocks.id, orderedIds[i]));
+    }
+  }
+
+  async duplicateModuleBlock(id: number): Promise<any> {
+    const [orig] = await db.select().from(moduleBlocks).where(eq(moduleBlocks.id, id));
+    if (!orig) throw new Error("Block not found");
+    const [dup] = await db.insert(moduleBlocks).values({
+      moduleId: orig.moduleId,
+      type: orig.type,
+      content: orig.content,
+      position: orig.position + 1,
+      settings: orig.settings,
+    } as any).returning();
+    return dup;
   }
 
   // ========== EMAIL CAMPAIGNS ==========

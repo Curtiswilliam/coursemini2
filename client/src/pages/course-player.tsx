@@ -303,9 +303,10 @@ export default function CoursePlayer() {
     return m ? parseInt(m[1]) : null;
   })();
   const [currentLessonId, setCurrentLessonId] = useState<number | null>(initialLessonId);
+  const [expandedModuleIds, setExpandedModuleIds] = useState<Set<number>>(new Set());
 
   // Quiz state
-  const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, number | number[]>>({});
   const [quizResult, setQuizResult] = useState<any>(null);
   const [quizSubmitting, setQuizSubmitting] = useState(false);
   const [kcAllAnswered, setKcAllAnswered] = useState(true);
@@ -450,6 +451,19 @@ export default function CoursePlayer() {
       setShowIntake(true);
     }
   }, [courseData, user]);
+
+  // Expand only the module containing the current lesson
+  useEffect(() => {
+    if (!course || !currentLessonId) return;
+    for (const subject of (course.subjects || [])) {
+      for (const mod of (subject.modules || [])) {
+        if (mod.lessons?.some((l: any) => l.id === currentLessonId)) {
+          setExpandedModuleIds(new Set([mod.id]));
+          return;
+        }
+      }
+    }
+  }, [currentLessonId, course?.id]);
 
   const currentLesson = allLessons.find((l: any) => l.id === currentLessonId);
   const hasNextButtonBlock = lessonBlocks.some((b: any) => b.type === "NEXT_BUTTON");
@@ -698,6 +712,28 @@ export default function CoursePlayer() {
     });
   };
 
+  const currentModuleId = currentLesson ?
+    (course?.subjects || []).flatMap((s: any) => s.modules || []).find((m: any) =>
+      m.lessons?.some((l: any) => l.id === currentLesson.id)
+    )?.id : undefined;
+
+  const canAdvanceToModule = (targetModuleId: number, srcModuleId: number | undefined) => {
+    if (!srcModuleId || targetModuleId === srcModuleId || isPreview) return true;
+    const currentMod = (course?.subjects || []).flatMap((s: any) => s.modules || []).find((m: any) => m.id === srcModuleId);
+    if (!currentMod) return true;
+    const blockingQuizzes = (currentMod.lessons || []).filter((l: any) => l.type === "QUIZ" && l.blockNextModule);
+    return blockingQuizzes.every((l: any) => {
+      const progress = progressMap[l.id];
+      return progress?.status === "COMPLETED" || localCompletedRef.current.has(l.id);
+    });
+  };
+
+  const nextModuleId = nextLesson ?
+    (course?.subjects || []).flatMap((s: any) => s.modules || []).find((m: any) =>
+      m.lessons?.some((l: any) => l.id === nextLesson?.id)
+    )?.id : undefined;
+  const nextModuleBlocked = nextModuleId !== undefined && nextModuleId !== currentModuleId && !canAdvanceToModule(nextModuleId, currentModuleId);
+
   const submitQuiz = async () => {
     if (!currentLesson?.quiz) return;
     setQuizSubmitting(true);
@@ -797,11 +833,19 @@ export default function CoursePlayer() {
                       ?.sort((a: any, b: any) => a.position - b.position)
                       .map((mod: any) => (
                         <div key={mod.id} className="mb-1">
-                          <div className="px-3 py-1 text-xs font-medium text-muted-foreground flex items-center gap-1">
-                            <ChevronDown className="h-3 w-3" />
-                            {mod.title}
-                          </div>
-                          {mod.lessons
+                          <button
+                            className="w-full px-3 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors text-left"
+                            onClick={() => setExpandedModuleIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(mod.id)) next.delete(mod.id);
+                              else next.add(mod.id);
+                              return next;
+                            })}
+                          >
+                            {expandedModuleIds.has(mod.id) ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+                            <span className="flex-1 truncate">{mod.title}</span>
+                          </button>
+                          {expandedModuleIds.has(mod.id) && mod.lessons
                             ?.sort((a: any, b: any) => a.position - b.position)
                             .map((lesson: any) => {
                               const isCompleted = progressMap[lesson.id]?.status === "COMPLETED" || localCompletedRef.current.has(lesson.id);
@@ -829,7 +873,6 @@ export default function CoursePlayer() {
                                     <Circle className="h-4 w-4 shrink-0" />
                                   )}
                                   <span className="flex-1 truncate">{lesson.title}</span>
-                                  {lessonIcon(lesson)}
                                 </button>
                               );
                             })}
@@ -981,27 +1024,62 @@ export default function CoursePlayer() {
                           <p className="font-medium text-sm">
                             {qi + 1}. {q.question}
                           </p>
-                          <RadioGroup
-                            value={String(quizAnswers[q.id] || "")}
-                            onValueChange={(val) => setQuizAnswers({ ...quizAnswers, [q.id]: parseInt(val) })}
-                          >
-                            {q.options?.map((opt: any) => (
-                              <div key={opt.id} className="flex items-center space-x-2">
-                                <RadioGroupItem value={String(opt.id)} id={`opt-${opt.id}`} />
-                                <Label htmlFor={`opt-${opt.id}`} className="font-normal cursor-pointer">{opt.text}</Label>
-                              </div>
-                            ))}
-                          </RadioGroup>
+                          {q.type === "MULTI_SELECTION" ? (
+                            <div className="space-y-2">
+                              {q.options?.map((opt: any) => (
+                                <div key={opt.id} className="flex items-center space-x-2">
+                                  <input
+                                    type="checkbox"
+                                    id={`opt-${opt.id}`}
+                                    checked={Array.isArray(quizAnswers[q.id]) ? (quizAnswers[q.id] as number[]).includes(opt.id) : false}
+                                    onChange={(e) => {
+                                      const current = Array.isArray(quizAnswers[q.id]) ? quizAnswers[q.id] as number[] : [];
+                                      if (e.target.checked) {
+                                        setQuizAnswers({ ...quizAnswers, [q.id]: [...current, opt.id] });
+                                      } else {
+                                        setQuizAnswers({ ...quizAnswers, [q.id]: current.filter((id: number) => id !== opt.id) });
+                                      }
+                                    }}
+                                    className="accent-primary"
+                                  />
+                                  <Label htmlFor={`opt-${opt.id}`} className="font-normal cursor-pointer">{opt.text}</Label>
+                                </div>
+                              ))}
+                              {(q.selectionLabel || "Select all that apply") ? (
+                                <p className="text-xs text-muted-foreground italic">{q.selectionLabel || "Select all that apply"}</p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <RadioGroup
+                              value={String(quizAnswers[q.id] || "")}
+                              onValueChange={(val) => setQuizAnswers({ ...quizAnswers, [q.id]: parseInt(val) })}
+                            >
+                              {q.options?.map((opt: any) => (
+                                <div key={opt.id} className="flex items-center space-x-2">
+                                  <RadioGroupItem value={String(opt.id)} id={`opt-${opt.id}`} />
+                                  <Label htmlFor={`opt-${opt.id}`} className="font-normal cursor-pointer">{opt.text}</Label>
+                                </div>
+                              ))}
+                            </RadioGroup>
+                          )}
                         </div>
                       ))}
                       <Button
                         onClick={submitQuiz}
-                        disabled={quizSubmitting || Object.keys(quizAnswers).length < (currentLesson.quiz.questions?.length || 0)}
+                        disabled={quizSubmitting || currentLesson.quiz.questions?.some((q: any) => {
+                          const ans = quizAnswers[q.id];
+                          if (q.type === "MULTI_SELECTION") return !Array.isArray(ans) || ans.length === 0;
+                          return !ans;
+                        })}
                         className="w-full"
                       >
                         Submit Quiz
                       </Button>
-                      {Object.keys(quizAnswers).length < (currentLesson.quiz.questions?.length || 0) && (
+                      {currentLesson.quiz.questions?.some((q: any) => {
+                        const ans = quizAnswers[q.id];
+                        if (q.type === "MULTI_SELECTION") return !Array.isArray(ans) || ans.length === 0;
+                        return !ans;
+                      }) && (
                         <p className="text-xs text-muted-foreground text-center">Please answer all questions before submitting</p>
                       )}
                     </div>
@@ -1125,13 +1203,16 @@ export default function CoursePlayer() {
                           variant={progressMap[currentLessonId!]?.status === "COMPLETED" ? "default" : "outline"}
                           onClick={() => setCurrentLessonId(nextLesson.id)}
                           data-testid="button-next-lesson"
-                          disabled={!kcAllAnswered}
+                          disabled={!kcAllAnswered || nextModuleBlocked}
                         >
                           Next
                           <ChevronRight className="h-4 w-4 ml-1" />
                         </Button>
                         {!kcAllAnswered && (
                           <p className="text-[10px] text-muted-foreground">Answer all questions to continue</p>
+                        )}
+                        {nextModuleBlocked && (
+                          <p className="text-xs text-amber-600 text-center mt-1">Complete all required quizzes in this module before moving on.</p>
                         )}
                       </div>
                     )}

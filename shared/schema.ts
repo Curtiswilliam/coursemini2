@@ -25,7 +25,7 @@ export const couponTypeEnum = pgEnum("coupon_type", ["PERCENTAGE", "FIXED"]);
 export const orderStatusEnum = pgEnum("order_status", ["PENDING", "COMPLETED", "REFUNDED"]);
 export const notificationTypeEnum = pgEnum("notification_type", ["INFO", "SUCCESS", "WARNING"]);
 export const affiliateReferralStatusEnum = pgEnum("affiliate_referral_status", ["PENDING", "APPROVED", "PAID"]);
-export const quizQuestionTypeEnum = pgEnum("quiz_question_type", ["MULTIPLE_CHOICE", "TRUE_FALSE"]);
+export const quizQuestionTypeEnum = pgEnum("quiz_question_type", ["MULTIPLE_CHOICE", "TRUE_FALSE", "SINGLE_SELECTION", "MULTI_SELECTION"]);
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -128,6 +128,7 @@ export const modules = pgTable("modules", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description"),
+  heroImage: text("hero_image"),
   position: integer("position").notNull().default(0),
   subjectId: integer("subject_id").references(() => subjects.id, { onDelete: "cascade" }).notNull(),
 });
@@ -148,6 +149,7 @@ export const lessons = pgTable("lessons", {
   minReadSeconds: integer("min_read_seconds"),
   minVideoPercent: integer("min_video_percent"),
   minQuizScore: integer("min_quiz_score"),
+  blockNextModule: boolean("block_next_module").default(false),
 });
 
 export const enrollments = pgTable("enrollments", {
@@ -318,6 +320,7 @@ export const quizQuestions = pgTable("quiz_questions", {
   question: text("question").notNull(),
   type: quizQuestionTypeEnum("type").notNull().default("MULTIPLE_CHOICE"),
   position: integer("position").notNull().default(0),
+  selectionLabel: text("selection_label"),
 });
 
 export const quizOptions = pgTable("quiz_options", {
@@ -495,6 +498,18 @@ export const lessonBlocks = pgTable("lesson_blocks", {
 });
 export type LessonBlock = typeof lessonBlocks.$inferSelect;
 export type InsertLessonBlock = typeof lessonBlocks.$inferInsert;
+
+export const moduleBlocks = pgTable("module_blocks", {
+  id: serial("id").primaryKey(),
+  moduleId: integer("module_id").references(() => modules.id, { onDelete: "cascade" }).notNull(),
+  type: blockTypeEnum("type").notNull(),
+  content: text("content").notNull().default("{}"),
+  position: integer("position").notNull().default(0),
+  settings: text("settings").notNull().default("{}"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type ModuleBlock = typeof moduleBlocks.$inferSelect;
+export type InsertModuleBlock = typeof moduleBlocks.$inferInsert;
 
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });

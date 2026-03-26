@@ -208,7 +208,7 @@ function ImageEditor({ content, onChange }: { content: any; onChange: (c: any) =
       </div>
       <Input value={content.alt || ""} onChange={(e) => onChange({ ...content, alt: e.target.value })} placeholder="Alt text" />
       <Input value={content.caption || ""} onChange={(e) => onChange({ ...content, caption: e.target.value })} placeholder="Caption (optional)" />
-      <Select value={content.align || "center"} onValueChange={(v) => onChange({ ...content, align: v })}>
+      <Select value={content.align || "bestfit"} onValueChange={(v) => onChange({ ...content, align: v })}>
         <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="left">Left</SelectItem>
@@ -1165,9 +1165,24 @@ function InlineAddZone({ onClick }: { onClick: () => void }) {
 interface BlockBuilderProps {
   lessonId: number;
   onSave?: () => void;
+  // Optional URL overrides (for module blocks)
+  listUrl?: string;
+  createUrl?: string;
+  reorderUrl?: string;
+  blockPatchUrl?: (id: number) => string;
+  blockDeleteUrl?: (id: number) => string;
+  blockDuplicateUrl?: (id: number) => string;
 }
 
-export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
+export function BlockBuilder({
+  lessonId, onSave,
+  listUrl,
+  createUrl,
+  reorderUrl,
+  blockPatchUrl,
+  blockDeleteUrl,
+  blockDuplicateUrl,
+}: BlockBuilderProps) {
   const { toast } = useToast();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [insertAfterIndex, setInsertAfterIndex] = useState<number | null>(null);
@@ -1178,21 +1193,29 @@ export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
   const [dropPosition, setDropPosition] = useState<"before" | "after">("after");
   const [history, setHistory] = useState<number[][]>([]);
 
+  // compute effective URLs
+  const effectiveListUrl = listUrl || `/api/lessons/${lessonId}/blocks`;
+  const effectiveCreateUrl = createUrl || `/api/lessons/${lessonId}/blocks`;
+  const effectiveReorderUrl = reorderUrl || `/api/lessons/${lessonId}/blocks/reorder`;
+  const effectiveBlockPatch = blockPatchUrl || ((id: number) => `/api/lessons/blocks/${id}`);
+  const effectiveBlockDelete = blockDeleteUrl || ((id: number) => `/api/lessons/blocks/${id}`);
+  const effectiveBlockDuplicate = blockDuplicateUrl || ((id: number) => `/api/lessons/blocks/${id}/duplicate`);
+
   const { data: blocks = [], isLoading } = useQuery<Block[]>({
-    queryKey: ["/api/lessons", lessonId, "blocks"],
+    queryKey: [effectiveListUrl],
     queryFn: async () => {
-      const res = await fetch(`/api/lessons/${lessonId}/blocks`, { credentials: "include" });
+      const res = await fetch(effectiveListUrl, { credentials: "include" });
       return res.json();
     },
   });
 
   const createMutation = useMutation({
     mutationFn: async ({ type, position }: { type: BlockType; position: number }) => {
-      const res = await apiRequest("POST", `/api/lessons/${lessonId}/blocks`, { type, position, content: "{}", settings: "{}" });
+      const res = await apiRequest("POST", effectiveCreateUrl, { type, position, content: "{}", settings: "{}" });
       return res.json();
     },
     onSuccess: (newBlock: Block) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/lessons", lessonId, "blocks"] });
+      queryClient.invalidateQueries({ queryKey: [effectiveListUrl] });
       if (newBlock.type !== "DIVIDER") {
         setEditingBlockId(newBlock.id);
       }
@@ -1202,11 +1225,11 @@ export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: any }) => {
-      const res = await apiRequest("PATCH", `/api/lessons/blocks/${id}`, data);
+      const res = await apiRequest("PATCH", effectiveBlockPatch(id), data);
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/lessons", lessonId, "blocks"] });
+      queryClient.invalidateQueries({ queryKey: [effectiveListUrl] });
       toast({ title: "Block saved" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -1214,31 +1237,31 @@ export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/lessons/blocks/${id}`);
+      await apiRequest("DELETE", effectiveBlockDelete(id));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/lessons", lessonId, "blocks"] });
+      queryClient.invalidateQueries({ queryKey: [effectiveListUrl] });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const duplicateMutation = useMutation({
     mutationFn: async (id: number) => {
-      const res = await apiRequest("POST", `/api/lessons/blocks/${id}/duplicate`);
+      const res = await apiRequest("POST", effectiveBlockDuplicate(id));
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/lessons", lessonId, "blocks"] });
+      queryClient.invalidateQueries({ queryKey: [effectiveListUrl] });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const reorderMutation = useMutation({
     mutationFn: async (orderedIds: number[]) => {
-      await apiRequest("POST", `/api/lessons/${lessonId}/blocks/reorder`, { orderedIds });
+      await apiRequest("POST", effectiveReorderUrl, { orderedIds });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/lessons", lessonId, "blocks"] });
+      queryClient.invalidateQueries({ queryKey: [effectiveListUrl] });
     },
   });
 
