@@ -452,6 +452,8 @@ export default function CoursePlayer() {
   }, [courseData, user]);
 
   const currentLesson = allLessons.find((l: any) => l.id === currentLessonId);
+  const hasNextButtonBlock = lessonBlocks.some((b: any) => b.type === "NEXT_BUTTON");
+  const hasNotesBlock = lessonBlocks.some((b: any) => b.type === "NOTES");
   const currentIndex = allLessons.findIndex((l: any) => l.id === currentLessonId);
   const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
   const nextLesson = currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
@@ -1017,7 +1019,20 @@ export default function CoursePlayer() {
 
                   {lessonBlocks.length > 0 ? (
                     <div data-testid="text-lesson-content">
-                      <BlockRenderer blocks={lessonBlocks} onKnowledgeChecksAnswered={setKcAllAnswered} />
+                      <BlockRenderer
+                        blocks={lessonBlocks}
+                        onKnowledgeChecksAnswered={setKcAllAnswered}
+                        navState={hasNextButtonBlock ? {
+                          onNext: nextLesson ? () => setCurrentLessonId(nextLesson.id) : undefined,
+                          onPrev: prevLesson ? () => setCurrentLessonId(prevLesson.id) : undefined,
+                          nextDisabled: !kcAllAnswered,
+                        } : undefined}
+                        noteState={hasNotesBlock && enrollment ? {
+                          content: noteContent,
+                          onChange: handleNoteChange,
+                          saveStatus: noteSaveStatus,
+                        } : undefined}
+                      />
                     </div>
                   ) : currentLesson.content ? (
                     <div
@@ -1035,7 +1050,7 @@ export default function CoursePlayer() {
               )}
 
               {/* Notes Panel */}
-              {enrollment && currentLessonAvailable && (
+              {enrollment && currentLessonAvailable && !hasNotesBlock && (
                 <div className="mt-8 border rounded-md overflow-hidden">
                   <button
                     className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"
@@ -1068,7 +1083,7 @@ export default function CoursePlayer() {
                 </div>
               )}
 
-              {currentLessonAvailable && (
+              {currentLessonAvailable && !hasNextButtonBlock && (
                 <div className="flex items-center justify-between pt-6 border-t mt-8">
                   <div>
                     {prevLesson && (

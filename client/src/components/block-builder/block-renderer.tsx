@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import DOMPurify from "dompurify";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, X, Download, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { CheckCircle2, X, Download, Copy, Check, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, StickyNote } from "lucide-react";
 
 export type BlockType =
   | "TEXT" | "HEADING" | "IMAGE" | "VIDEO" | "BUTTON" | "DIVIDER"
   | "QUOTE" | "BULLETED_LIST" | "NUMBERED_LIST" | "ACCORDION" | "TABS"
   | "PROCESS" | "FLASHCARDS" | "KNOWLEDGE_CHECK" | "TABLE" | "GALLERY"
-  | "CALLOUT" | "TIMELINE" | "CODE" | "FILE";
+  | "CALLOUT" | "TIMELINE" | "CODE" | "FILE" | "NEXT_BUTTON" | "NOTES";
 
 interface Block {
   id: number;
@@ -66,9 +67,9 @@ function VideoBlock({ content }: { content: any }) {
   if (content.embedCode) {
     return (
       <figure>
-        <div className="aspect-video rounded-lg overflow-hidden bg-black"
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content.embedCode, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'src', 'width', 'height', 'style'] }) }}
-          style={{ position: 'relative' }}
+        <div
+          className="aspect-video rounded-lg overflow-hidden bg-black relative [&_iframe]:w-full [&_iframe]:h-full [&_iframe]:absolute [&_iframe]:inset-0"
+          dangerouslySetInnerHTML={{ __html: content.embedCode }}
         />
         {content.caption && <figcaption className="text-center text-sm text-muted-foreground mt-2">{content.caption}</figcaption>}
       </figure>
@@ -508,6 +509,82 @@ function FileBlock({ content }: { content: any }) {
   );
 }
 
+function NextButtonBlock({ content, navState }: { content: any; navState?: { onNext?: () => void; onPrev?: () => void; nextDisabled?: boolean } }) {
+  const nextLabel = content.nextLabel || "Next";
+  const prevLabel = content.prevLabel || "Previous";
+  if (!navState) {
+    // Editor preview
+    return (
+      <div className="flex items-center justify-between gap-2 py-2">
+        <button className="flex items-center gap-1 px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground">
+          <ChevronLeft className="h-4 w-4" /> {prevLabel}
+        </button>
+        <button className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium">
+          {nextLabel} <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center justify-between gap-2 py-2">
+      <div>
+        {navState.onPrev && (
+          <Button variant="ghost" onClick={navState.onPrev}>
+            <ChevronLeft className="h-4 w-4 mr-1" /> {prevLabel}
+          </Button>
+        )}
+      </div>
+      <div className="flex flex-col items-end gap-1">
+        {navState.onNext && (
+          <Button
+            onClick={navState.onNext}
+            disabled={navState.nextDisabled}
+          >
+            {nextLabel} <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        )}
+        {navState.nextDisabled && (
+          <p className="text-[10px] text-muted-foreground">Answer all questions to continue</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NotesBlock({ content, noteState }: { content: any; noteState?: { content: string; onChange: (v: string) => void; saveStatus: string } }) {
+  const label = content.label || "My Notes";
+  if (!noteState) {
+    return (
+      <div className="border border-border rounded-xl p-4 bg-muted/20">
+        <div className="flex items-center gap-2 mb-2">
+          <StickyNote className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-muted-foreground">{label}</span>
+        </div>
+        <div className="h-20 rounded-lg bg-muted/40 border border-dashed border-border" />
+      </div>
+    );
+  }
+  return (
+    <div className="border border-border rounded-xl overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/30">
+        <StickyNote className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">{label}</span>
+        {noteState.saveStatus === "saving" && <span className="text-xs text-amber-500 ml-auto">Saving...</span>}
+        {noteState.saveStatus === "saved" && noteState.content && <span className="text-xs text-emerald-500 ml-auto">Saved</span>}
+      </div>
+      <div className="px-4 pb-4 pt-3">
+        <Textarea
+          className="min-h-[120px] text-sm resize-none"
+          placeholder="Write your notes for this lesson..."
+          value={noteState.content}
+          onChange={(e) => noteState.onChange(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground mt-1">Notes auto-save as you type</p>
+      </div>
+    </div>
+  );
+}
+
 function ButtonBlock({ content }: { content: any }) {
   if (!content.text) return null;
   const alignCls = content.align === "center" ? "text-center" : content.align === "right" ? "text-right" : "text-left";
@@ -571,6 +648,8 @@ function renderBlock(block: Block) {
     case "FILE": return <FileBlock content={content} />;
     case "BUTTON": return <ButtonBlock content={content} />;
     case "DIVIDER": return <DividerBlock content={content} />;
+    case "NEXT_BUTTON": return <NextButtonBlock content={content} />;
+    case "NOTES": return <NotesBlock content={content} />;
     default: return null;
   }
 }
@@ -578,9 +657,19 @@ function renderBlock(block: Block) {
 interface BlockRendererProps {
   blocks: Block[];
   onKnowledgeChecksAnswered?: (allAnswered: boolean) => void;
+  navState?: {
+    onNext?: () => void;
+    onPrev?: () => void;
+    nextDisabled?: boolean;
+  };
+  noteState?: {
+    content: string;
+    onChange: (v: string) => void;
+    saveStatus: string;
+  };
 }
 
-export function BlockRenderer({ blocks, onKnowledgeChecksAnswered }: BlockRendererProps) {
+export function BlockRenderer({ blocks, onKnowledgeChecksAnswered, navState, noteState }: BlockRendererProps) {
   const kcBlocks = blocks.filter(b => b.type === "KNOWLEDGE_CHECK");
   const hasKC = kcBlocks.length > 0;
 
@@ -651,6 +740,26 @@ export function BlockRenderer({ blocks, onKnowledgeChecksAnswered }: BlockRender
                 submitted={kcSubmitted}
                 onSelect={(i) => handleKcSelect(block.id, i)}
               />
+            </div>
+          );
+        }
+
+        if (block.type === "NEXT_BUTTON") {
+          let content: any = {};
+          try { content = JSON.parse(block.content); } catch {}
+          return (
+            <div key={block.id} className={padding} style={settings.background ? { background: settings.background } : {}}>
+              <NextButtonBlock content={content} navState={navState} />
+            </div>
+          );
+        }
+
+        if (block.type === "NOTES") {
+          let content: any = {};
+          try { content = JSON.parse(block.content); } catch {}
+          return (
+            <div key={block.id} className={padding} style={settings.background ? { background: settings.background } : {}}>
+              <NotesBlock content={content} noteState={noteState} />
             </div>
           );
         }

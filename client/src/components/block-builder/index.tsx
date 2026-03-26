@@ -13,7 +13,7 @@ import {
   Plus, Trash2, GripVertical, Copy, Settings,
   Type, Heading, Image, Video, Quote, Info, Code,
   List, ListOrdered, Minus, MousePointer,
-  ChevronDown, ChevronUp, LayoutDashboard, RefreshCw, ListChecks, Clock,
+  ChevronDown, ChevronUp, ChevronRight, LayoutDashboard, RefreshCw, ListChecks, Clock,
   Grid, Download, Table, CheckCircle2, X, Pencil, UploadCloud,
 } from "lucide-react";
 
@@ -21,7 +21,7 @@ export type BlockType =
   | "TEXT" | "HEADING" | "IMAGE" | "VIDEO" | "BUTTON" | "DIVIDER"
   | "QUOTE" | "BULLETED_LIST" | "NUMBERED_LIST" | "ACCORDION" | "TABS"
   | "PROCESS" | "FLASHCARDS" | "KNOWLEDGE_CHECK" | "TABLE" | "GALLERY"
-  | "CALLOUT" | "TIMELINE" | "CODE" | "FILE";
+  | "CALLOUT" | "TIMELINE" | "CODE" | "FILE" | "NEXT_BUTTON" | "NOTES";
 
 interface Block {
   id: number;
@@ -82,6 +82,13 @@ const BLOCK_CATEGORIES = [
     label: "Assessment",
     blocks: [
       { type: "KNOWLEDGE_CHECK" as BlockType, label: "Knowledge Check", icon: CheckCircle2, desc: "Inline quiz question" },
+    ],
+  },
+  {
+    label: "Lesson Controls",
+    blocks: [
+      { type: "NEXT_BUTTON" as BlockType, label: "Next Button", icon: ChevronRight, desc: "Navigation button for students" },
+      { type: "NOTES" as BlockType, label: "My Notes", icon: Pencil, desc: "Student notes section" },
     ],
   },
 ];
@@ -704,6 +711,34 @@ function DividerEditor({ content, onChange }: { content: any; onChange: (c: any)
   );
 }
 
+function NextButtonEditor({ content, onChange }: { content: any; onChange: (c: any) => void }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">Next button label</label>
+        <Input value={content.nextLabel || ""} onChange={(e) => onChange({ ...content, nextLabel: e.target.value })} placeholder="Next" />
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">Previous button label</label>
+        <Input value={content.prevLabel || ""} onChange={(e) => onChange({ ...content, prevLabel: e.target.value })} placeholder="Previous" />
+      </div>
+      <p className="text-xs text-muted-foreground">These labels appear on the navigation buttons in the student view. Leave empty to use defaults.</p>
+    </div>
+  );
+}
+
+function NotesEditor({ content, onChange }: { content: any; onChange: (c: any) => void }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">Section label</label>
+        <Input value={content.label || ""} onChange={(e) => onChange({ ...content, label: e.target.value })} placeholder="My Notes" />
+      </div>
+      <p className="text-xs text-muted-foreground">This adds a student notes section inline in the lesson. Students can write and save notes here.</p>
+    </div>
+  );
+}
+
 // =================== BLOCK PREVIEW ===================
 
 function BlockPreview({ block }: { block: Block }) {
@@ -757,6 +792,19 @@ function BlockPreview({ block }: { block: Block }) {
       return <div className="inline-flex"><span className="text-sm px-3 py-1 rounded bg-primary text-primary-foreground">{content.text || "Button"}</span></div>;
     case "DIVIDER":
       return <div className="border-t border-border w-full my-1" />;
+    case "NEXT_BUTTON":
+      return (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs px-3 py-1.5 rounded-md border border-border text-muted-foreground">{content.prevLabel || "← Previous"}</span>
+          <span className="text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground">{content.nextLabel || "Next →"}</span>
+        </div>
+      );
+    case "NOTES":
+      return (
+        <div className="border border-border rounded-lg p-3 bg-muted/30">
+          <span className="text-xs font-medium text-muted-foreground">{content.label || "My Notes"} — student notes section</span>
+        </div>
+      );
     default:
       return <p className="text-sm text-muted-foreground italic">{block.type}</p>;
   }
@@ -796,6 +844,8 @@ function BlockEditorPanel({ block, onSave, onClose }: { block: Block; onSave: (c
       case "FILE": return <FileEditor content={localContent} onChange={setLocalContent} />;
       case "BUTTON": return <ButtonEditor content={localContent} onChange={setLocalContent} />;
       case "DIVIDER": return <DividerEditor content={localContent} onChange={setLocalContent} />;
+      case "NEXT_BUTTON": return <NextButtonEditor content={localContent} onChange={setLocalContent} />;
+      case "NOTES": return <NotesEditor content={localContent} onChange={setLocalContent} />;
       default: return <p className="text-muted-foreground">No editor for {block.type}</p>;
     }
   };
@@ -887,14 +937,15 @@ function BlockRow({
   const settings = (() => { try { return JSON.parse(block.settings); } catch { return {}; } })();
   const paddingMap: Record<string, string> = { sm: "p-3", md: "p-5", lg: "p-8", none: "p-0" };
   const padding = paddingMap[settings.padding || "md"] || "p-5";
+  const dragHandleActive = useRef(false);
 
   return (
     <div
       draggable
-      onDragStart={onDragStart}
+      onDragStart={(e) => { if (!dragHandleActive.current) { e.preventDefault(); return; } onDragStart(e); }}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      onDragEnd={onDragEnd}
+      onDragEnd={(e) => { dragHandleActive.current = false; onDragEnd(e); }}
       className={`group relative transition-all ${isDragging ? "opacity-40" : ""}`}
       style={settings.background ? { background: settings.background } : {}}
     >
@@ -908,7 +959,12 @@ function BlockRow({
             <ChevronDown className="h-3.5 w-3.5" />
           </button>
           <div className="w-px h-3.5 bg-border mx-0.5" />
-          <button className="cursor-grab text-muted-foreground hover:text-foreground p-1" title="Drag to reorder">
+          <button
+            className="cursor-grab text-muted-foreground hover:text-foreground p-1"
+            title="Drag to reorder"
+            onMouseDown={() => { dragHandleActive.current = true; }}
+            onMouseUp={() => { dragHandleActive.current = false; }}
+          >
             <GripVertical className="h-3.5 w-3.5" />
           </button>
           <button onClick={onEdit} className="text-muted-foreground hover:text-primary p-1" title="Edit">
@@ -989,6 +1045,8 @@ export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
   const [settingsBlockId, setSettingsBlockId] = useState<number | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<"before" | "after">("after");
+  const [history, setHistory] = useState<number[][]>([]);
 
   const { data: blocks = [], isLoading } = useQuery<Block[]>({
     queryKey: ["/api/lessons", lessonId, "blocks"],
@@ -1071,18 +1129,30 @@ export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
     setSettingsBlockId(null);
   };
 
-  const handleDrop = (targetId: number) => {
+  const handleDrop = (targetId: number, position: "before" | "after") => {
     if (!dragId || dragId === targetId) return;
     const ids = blocks.map((b) => b.id);
     const fromIdx = ids.indexOf(dragId);
-    const toIdx = ids.indexOf(targetId);
+    let toIdx = ids.indexOf(targetId);
     if (fromIdx === -1 || toIdx === -1) return;
+    // push current order to history for undo
+    setHistory(prev => [...prev.slice(-19), ids]);
     const reordered = [...ids];
     reordered.splice(fromIdx, 1);
-    reordered.splice(toIdx, 0, dragId);
+    // recalculate toIdx after removal
+    toIdx = reordered.indexOf(targetId);
+    const insertAt = position === "after" ? toIdx + 1 : toIdx;
+    reordered.splice(insertAt, 0, dragId);
     reorderMutation.mutate(reordered);
     setDragId(null);
     setDragOverId(null);
+  };
+
+  const handleUndo = () => {
+    const prev = history[history.length - 1];
+    if (!prev) return;
+    setHistory(h => h.slice(0, -1));
+    reorderMutation.mutate(prev);
   };
 
   const handleMove = (id: number, direction: "up" | "down") => {
@@ -1109,6 +1179,13 @@ export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
 
   return (
     <div className="space-y-2">
+      {history.length > 0 && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={handleUndo}>
+            <RefreshCw className="h-3 w-3" /> Undo
+          </Button>
+        </div>
+      )}
       {blocks.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed border-border rounded-xl">
           <div className="text-5xl mb-4">✦</div>
@@ -1122,18 +1199,32 @@ export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
           <InlineAddZone onClick={() => { setInsertAfterIndex(-1); setPickerOpen(true); }} />
           {blocks.map((block, idx) => (
             <div key={block.id}>
+              {/* Drop line BEFORE block */}
+              {dragId && dragOverId === block.id && dropPosition === "before" && (
+                <div className="h-0.5 bg-primary rounded-full mx-1 my-1 shadow-sm shadow-primary/50" />
+              )}
               <BlockRow
                 block={block}
                 onEdit={() => setEditingBlockId(editingBlockId === block.id ? null : block.id)}
-                onDelete={() => { if (confirm("Delete this block?")) deleteMutation.mutate(block.id); }}
+                onDelete={() => {
+                  if (confirm("Delete this block?")) {
+                    setHistory(prev => [...prev.slice(-19), blocks.map(b => b.id)]);
+                    deleteMutation.mutate(block.id);
+                  }
+                }}
                 onDuplicate={() => duplicateMutation.mutate(block.id)}
                 onMoveUp={() => handleMove(block.id, "up")}
                 onMoveDown={() => handleMove(block.id, "down")}
                 isFirst={idx === 0}
                 isLast={idx === blocks.length - 1}
                 onDragStart={(e) => { setDragId(block.id); e.dataTransfer.effectAllowed = "move"; }}
-                onDragOver={(e) => { e.preventDefault(); setDragOverId(block.id); }}
-                onDrop={() => handleDrop(block.id)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOverId(block.id);
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setDropPosition(e.clientY < rect.top + rect.height / 2 ? "before" : "after");
+                }}
+                onDrop={() => handleDrop(block.id, dropPosition)}
                 onDragEnd={() => { setDragId(null); setDragOverId(null); }}
                 isDragging={dragId === block.id}
                 isEditing={editingBlockId === block.id}
@@ -1144,7 +1235,11 @@ export function BlockBuilder({ lessonId, onSave }: BlockBuilderProps) {
                 onCloseSettings={() => setSettingsBlockId(null)}
                 onSaveSettings={(s) => handleSaveSettings(block.id, s)}
               />
-              <InlineAddZone onClick={() => { setInsertAfterIndex(idx); setPickerOpen(true); }} />
+              {/* Drop line AFTER block */}
+              {dragId && dragOverId === block.id && dropPosition === "after" && (
+                <div className="h-0.5 bg-primary rounded-full mx-1 my-1 shadow-sm shadow-primary/50" />
+              )}
+              {!dragId && <InlineAddZone onClick={() => { setInsertAfterIndex(idx); setPickerOpen(true); }} />}
             </div>
           ))}
         </>
