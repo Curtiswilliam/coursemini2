@@ -37,7 +37,15 @@ declare module "http" {
 // Apply helmet security headers. In development, disable CSP so Vite HMR works.
 app.use(
   helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === "production" ? undefined : false,
+    contentSecurityPolicy: process.env.NODE_ENV === "production"
+      ? {
+          directives: {
+            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+            "frame-src": ["'self'", "https://www.youtube.com", "https://youtube.com", "https://www.loom.com", "https://player.vimeo.com"],
+            "child-src": ["'self'", "https://www.youtube.com", "https://youtube.com", "https://www.loom.com", "https://player.vimeo.com"],
+          },
+        }
+      : false,
   })
 );
 
