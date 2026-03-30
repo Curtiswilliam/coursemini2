@@ -15,7 +15,7 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const roleEnum = pgEnum("role", ["ADMIN", "INSTRUCTOR", "STUDENT"]);
+export const roleEnum = pgEnum("role", ["SUPER_ADMIN", "ADMIN", "INSTRUCTOR", "STUDENT"]);
 export const courseStatusEnum = pgEnum("course_status", ["DRAFT", "PUBLISHED", "ARCHIVED"]);
 export const courseLevelEnum = pgEnum("course_level", ["BEGINNER", "INTERMEDIATE", "ADVANCED"]);
 export const enrollmentStatusEnum = pgEnum("enrollment_status", ["ACTIVE", "COMPLETED", "EXPIRED", "SUSPENDED"]);
@@ -49,6 +49,7 @@ export const users = pgTable("users", {
   interests: jsonb("interests"),
   intakeCompletedAt: timestamp("intake_completed_at"),
   weeklyGoalLessons: integer("weekly_goal_lessons").default(5),
+  adminPermissions: jsonb("admin_permissions").$type<string[]>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

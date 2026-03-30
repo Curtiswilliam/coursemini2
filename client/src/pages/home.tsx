@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -128,17 +127,6 @@ const FOR_WHO = [
 ];
 
 export default function Home() {
-  // Force light mode on the marketing page regardless of user preference
-  useEffect(() => {
-    const root = document.documentElement;
-    const prev = root.classList.contains("dark") ? "dark" : "light";
-    root.classList.remove("dark");
-    root.classList.add("light");
-    return () => {
-      root.classList.remove("light");
-      root.classList.add(prev);
-    };
-  }, []);
 
   const { data: courses, isLoading: coursesLoading } = useQuery<any[]>({
     queryKey: ["/api/courses", "?featured=true&limit=4"],

@@ -461,6 +461,11 @@ export default function CourseDetailPage() {
                             navigate(`/auth?tab=register&returnTo=/courses/${course.slug}`);
                             return;
                           }
+                          if (!course.isFree && discountedPrice > 0) {
+                            const params = appliedCoupon ? `?coupon=${appliedCoupon.code}` : "";
+                            navigate(`/payment/${course.slug}${params}`);
+                            return;
+                          }
                           enrollMutation.mutate();
                         }}
                         disabled={enrollMutation.isPending}
@@ -469,7 +474,7 @@ export default function CourseDetailPage() {
                         {enrollMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         {course.isFree
                           ? "Enroll for Free"
-                          : `Enroll - $${discountedPrice.toFixed(2)}`}
+                          : `Pay & Enroll – $${discountedPrice.toFixed(2)}`}
                       </Button>
 
                       {/* Waitlist */}

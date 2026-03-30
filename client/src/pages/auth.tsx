@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
-  GraduationCap, Loader2, Mail, User, CheckCircle2,
+  GraduationCap, Loader2, Mail, User, CheckCircle2, Shield,
 } from "lucide-react";
 
 // ─── Login ────────────────────────────────────────────────────────────────────
@@ -44,7 +44,7 @@ function LoginForm() {
       if (returnTo) {
         navigate(returnTo);
       } else {
-        navigate(me.role === "ADMIN" || me.role === "INSTRUCTOR" ? "/admin" : "/dashboard");
+        navigate(["ADMIN", "INSTRUCTOR", "SUPER_ADMIN"].includes(me.role) ? "/admin" : "/dashboard");
       }
     } catch (e: any) {
       toast({ title: "Login failed", description: e.message, variant: "destructive" });
@@ -375,8 +375,46 @@ function RegisterWizard() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AuthPage() {
+  const [location] = useLocation();
+  const isAdminLogin = location === "/auth-admin";
   const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
   const defaultTab = params.get("tab") === "register" ? "register" : "login";
+
+  if (isAdminLogin) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] flex">
+        <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900 relative items-center justify-center p-12">
+          <div className="relative z-10 text-white max-w-md">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-md bg-white/10 backdrop-blur-sm">
+                <Shield className="h-7 w-7" />
+              </div>
+              <div>
+                <span className="text-2xl font-bold">Admin Access</span>
+                <p className="text-sm text-white/60">CourseMini by EQC Institute</p>
+              </div>
+            </div>
+            <h2 className="text-3xl font-bold mb-4 leading-tight">Administrator Login</h2>
+            <p className="text-white/70 leading-relaxed">
+              This area is restricted to authorised administrators only. Please use your admin credentials to continue.
+            </p>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-md">
+            <div className="mb-6 flex items-center gap-2">
+              <Shield className="h-5 w-5 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground font-medium">Admin Portal</span>
+            </div>
+            <LoginForm />
+            <p className="mt-4 text-center text-sm text-muted-foreground">
+              <a href="/auth" className="text-primary underline">Student login</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex">
@@ -427,6 +465,10 @@ export default function AuthPage() {
               <RegisterWizard />
             </TabsContent>
           </Tabs>
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Admin?{" "}
+            <a href="/auth-admin" className="text-primary underline">Admin login</a>
+          </p>
         </div>
       </div>
     </div>

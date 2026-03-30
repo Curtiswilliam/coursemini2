@@ -23,6 +23,8 @@ import {
   GitBranch,
   Mail,
   Webhook,
+  UserPlus,
+  UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +33,8 @@ type NavItem = {
   icon: any;
   label: string;
   exact?: boolean;
-  adminOnly?: boolean;
+  superAdminOnly?: boolean;
+  permissionKey?: string;
   comingSoon?: boolean;
 };
 
@@ -39,38 +42,45 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Overview",
     items: [
-      { href: "/admin", icon: LayoutDashboard, label: "Dashboard", exact: true },
+      { href: "/admin", icon: LayoutDashboard, label: "Dashboard", exact: true, permissionKey: "dashboard" },
     ],
   },
   {
     label: "Product",
     items: [
-      { href: "/admin/courses", icon: BookOpen, label: "Courses" },
+      { href: "/admin/courses", icon: BookOpen, label: "Courses", permissionKey: "courses" },
     ],
   },
   {
     label: "Sell",
     items: [
-      { href: "/admin/coupons", icon: Tag, label: "Coupons" },
-      { href: "/admin/orders", icon: ShoppingCart, label: "Orders & Revenue" },
-      { href: "/admin/pathways", icon: GitBranch, label: "Pathways" },
+      { href: "/admin/coupons", icon: Tag, label: "Coupons", permissionKey: "coupons" },
+      { href: "/admin/orders", icon: ShoppingCart, label: "Orders & Revenue", permissionKey: "orders" },
+      { href: "/admin/pathways", icon: GitBranch, label: "Pathways", permissionKey: "pathways" },
     ],
   },
   {
     label: "Engage",
     items: [
-      { href: "/admin/students", icon: Users, label: "Students" },
-      { href: "/admin/groups", icon: UsersRound, label: "Student Groups" },
-      { href: "/admin/analytics", icon: BarChart3, label: "Analytics" },
-      { href: "/admin/email-templates", icon: Mail, label: "Email Templates" },
-      { href: "/admin/webhooks", icon: Webhook, label: "Webhooks" },
+      { href: "/admin/students", icon: Users, label: "Students", permissionKey: "students" },
+      { href: "/admin/groups", icon: UsersRound, label: "Student Groups", permissionKey: "groups" },
+      { href: "/admin/analytics", icon: BarChart3, label: "Analytics", permissionKey: "analytics" },
+      { href: "/admin/email-templates", icon: Mail, label: "Email Templates", permissionKey: "email-templates" },
+      { href: "/admin/webhooks", icon: Webhook, label: "Webhooks", permissionKey: "webhooks" },
     ],
   },
   {
     label: "Manage",
     items: [
-      { href: "/admin/users", icon: Shield, label: "Users & Roles", adminOnly: true },
-      { href: "/admin/setup", icon: Settings, label: "Settings" },
+      { href: "/admin/users", icon: Shield, label: "Users & Roles", superAdminOnly: true },
+      { href: "/admin/create-account", icon: UserPlus, label: "Create Account", superAdminOnly: true },
+      { href: "/admin/setup", icon: Settings, label: "Settings", permissionKey: "settings" },
+    ],
+  },
+  {
+    label: "Account",
+    items: [
+      { href: "/admin/profile", icon: UserCircle, label: "My Profile" },
     ],
   },
 ];
@@ -94,7 +104,15 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     return location === href;
   };
 
-  const isAdmin = user?.role === "ADMIN";
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const adminPermissions: string[] = (user as any)?.adminPermissions || [];
+
+  function canSeeItem(item: NavItem): boolean {
+    if (item.superAdminOnly) return isSuperAdmin;
+    if (isSuperAdmin) return true; // super admin sees everything
+    if (!item.permissionKey) return true; // no permission key = always visible
+    return adminPermissions.includes(item.permissionKey);
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -112,9 +130,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-6">
           {navSections.map((section) => {
-            const visibleItems = section.items.filter(
-              (item) => !item.adminOnly || isAdmin
-            );
+            const visibleItems = section.items.filter(canSeeItem);
             if (visibleItems.length === 0) return null;
 
             return (
@@ -167,7 +183,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             </Avatar>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium truncate">{user?.name}</p>
-              <p className="text-[10px] text-muted-foreground capitalize">{user?.role?.toLowerCase()}</p>
+              <p className="text-[10px] text-muted-foreground capitalize">{user?.role?.replace("_", " ").toLowerCase()}</p>
             </div>
           </div>
           <Separator />

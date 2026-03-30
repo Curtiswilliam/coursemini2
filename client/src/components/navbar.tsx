@@ -11,14 +11,14 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/components/theme-provider";
 import { NotificationBell } from "@/components/notification-bell";
-import { GraduationCap, Sun, Moon, LogOut, LayoutDashboard, BookOpen, Award } from "lucide-react";
+import { GraduationCap, Sun, Moon, LogOut, LayoutDashboard, BookOpen, Award, Settings } from "lucide-react";
 
 export function Navbar() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [location] = useLocation();
 
-  const isAdmin = user?.role === "ADMIN" || user?.role === "INSTRUCTOR";
+  const isAdmin = user?.role === "ADMIN" || user?.role === "INSTRUCTOR" || user?.role === "SUPER_ADMIN";
 
   return (
     <nav className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md">
@@ -78,11 +78,18 @@ export function Navbar() {
                       My Courses
                     </DropdownMenuItem>
                   </Link>
-                  {isAdmin && (
+                  {isAdmin ? (
                     <Link href="/admin">
                       <DropdownMenuItem data-testid="link-admin">
                         <LayoutDashboard className="mr-2 h-4 w-4" />
                         Admin Dashboard
+                      </DropdownMenuItem>
+                    </Link>
+                  ) : (
+                    <Link href="/account">
+                      <DropdownMenuItem>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Account Settings
                       </DropdownMenuItem>
                     </Link>
                   )}

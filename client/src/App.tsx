@@ -37,6 +37,10 @@ import ResetPasswordPage from "@/pages/reset-password";
 import LandingPage from "@/pages/landing-page";
 import AdminWebhooks from "@/pages/admin/webhooks";
 import MyNotesPage from "@/pages/my-notes";
+import AccountSettings from "@/pages/account-settings";
+import AdminCreateAccount from "@/pages/admin/create-account";
+import AdminProfile from "@/pages/admin/profile";
+import PaymentPage from "@/pages/payment";
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -47,8 +51,8 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (!user) return <Redirect to="/auth" />;
-  if (user.role !== "ADMIN" && user.role !== "INSTRUCTOR") return <Redirect to="/" />;
+  if (!user) return <Redirect to="/auth-admin" />;
+  if (user.role !== "ADMIN" && user.role !== "INSTRUCTOR" && user.role !== "SUPER_ADMIN") return <Redirect to="/" />;
   return <>{children}</>;
 }
 
@@ -78,6 +82,8 @@ function AdminRouter() {
               <Route path="/admin/groups" component={AdminGroups} />
               <Route path="/admin/email-templates" component={EmailTemplates} />
               <Route path="/admin/webhooks" component={AdminWebhooks} />
+              <Route path="/admin/create-account" component={AdminCreateAccount} />
+              <Route path="/admin/profile" component={AdminProfile} />
             </Switch>
           </AdminLayout>
         </Route>
@@ -104,6 +110,9 @@ function PublicRouter() {
           <Route path="/certificates/:code" component={CertificatePage} />
           <Route path="/lp/:slug" component={LandingPage} />
           <Route path="/my-notes" component={MyNotesPage} />
+          <Route path="/account" component={AccountSettings} />
+          <Route path="/payment/:slug" component={PaymentPage} />
+          <Route path="/auth-admin" component={AuthPage} />
           <Route component={NotFound} />
         </Switch>
       </main>

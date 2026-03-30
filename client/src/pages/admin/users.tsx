@@ -19,7 +19,7 @@ export default function AdminUsers() {
 
   const { data: users, isLoading } = useQuery<UserRow[]>({
     queryKey: ["/api/admin/users"],
-    enabled: user?.role === "ADMIN",
+    enabled: user?.role === "SUPER_ADMIN",
   });
 
   const updateRoleMutation = useMutation({
@@ -48,7 +48,7 @@ export default function AdminUsers() {
     },
   });
 
-  if (user?.role !== "ADMIN") {
+  if (user?.role !== "SUPER_ADMIN") {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Card className="w-full max-w-md">
@@ -110,7 +110,7 @@ export default function AdminUsers() {
                   </div>
                   <div className="flex items-center gap-3">
                     {u.id === user?.id ? (
-                      <Badge variant="default" data-testid={`badge-role-${u.id}`}>ADMIN (You)</Badge>
+                      <Badge variant="default" data-testid={`badge-role-${u.id}`}>{u.role.replace("_", " ")} (You)</Badge>
                     ) : (
                       <>
                         <div className="flex items-center gap-2">
@@ -134,6 +134,7 @@ export default function AdminUsers() {
                             <SelectItem value="STUDENT">Student</SelectItem>
                             <SelectItem value="INSTRUCTOR">Instructor</SelectItem>
                             <SelectItem value="ADMIN">Admin</SelectItem>
+                            <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
                           </SelectContent>
                         </Select>
                       </>

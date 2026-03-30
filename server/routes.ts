@@ -8,6 +8,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import Anthropic from "@anthropic-ai/sdk";
+import Stripe from "stripe";
 import { storage } from "./storage";
 import { hashPassword, comparePasswords } from "./auth";
 import { fireCampaignTrigger } from "./campaigns";
@@ -16,6 +17,10 @@ import { scheduleDripSequence, schedulePostCompletionSequence, scheduleInactivit
 import { fireWebhook } from "./webhooks";
 import crypto from "crypto";
 import type { User } from "@shared/schema";
+
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null;
 
 // ========== BADGE DEFINITIONS ==========
 const BADGE_DEFINITIONS = [
@@ -122,8 +127,20 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Unauthorized" });
     }
     const user = await storage.getUser(req.session.userId);
-    if (!user || (user.role !== "ADMIN" && user.role !== "INSTRUCTOR")) {
+    if (!user || (user.role !== "ADMIN" && user.role !== "INSTRUCTOR" && user.role !== "SUPER_ADMIN")) {
       return res.status(403).json({ message: "Forbidden" });
+    }
+    req.currentUser = user;
+    next();
+  }
+
+  async function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const user = await storage.getUser(req.session.userId);
+    if (!user || user.role !== "SUPER_ADMIN") {
+      return res.status(403).json({ message: "Forbidden – super admin only" });
     }
     req.currentUser = user;
     next();
@@ -1669,16 +1686,12 @@ Return ONLY the description text, no quotes, no preamble.`,
     res.json(allUsers.map(u => ({ id: u.id, username: u.username, name: u.name, email: u.email, role: u.role, isActive: (u as any).isActive ?? true })));
   });
 
-  app.patch("/api/admin/users/:id/role", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/users/:id/role", requireSuperAdmin, async (req, res) => {
     try {
-      const currentUser = req.currentUser!;
-      if (currentUser.role !== "ADMIN") {
-        return res.status(403).json({ message: "Only super admins can manage users" });
-      }
       const userId = parseIdParam(req.params.id);
       if (userId === null) return res.status(400).json({ message: "Invalid user ID" });
       const { role } = req.body;
-      if (!["STUDENT", "INSTRUCTOR", "ADMIN"].includes(role)) {
+      if (!["STUDENT", "INSTRUCTOR", "ADMIN", "SUPER_ADMIN"].includes(role)) {
         return res.status(400).json({ message: "Invalid role" });
       }
       const updated = await storage.updateUserRole(userId, role);
@@ -1691,12 +1704,9 @@ Return ONLY the description text, no quotes, no preamble.`,
     }
   });
 
-  app.patch("/api/admin/users/:id/status", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/users/:id/status", requireSuperAdmin, async (req, res) => {
     try {
       const currentUser = req.currentUser!;
-      if (currentUser.role !== "ADMIN") {
-        return res.status(403).json({ message: "Only super admins can manage users" });
-      }
       const userId = parseIdParam(req.params.id);
       if (userId === null) return res.status(400).json({ message: "Invalid user ID" });
       if (userId === currentUser.id) return res.status(400).json({ message: "You cannot deactivate your own account" });
@@ -2587,6 +2597,184 @@ Return ONLY the description text, no quotes, no preamble.`,
     } catch (e: any) {
       res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
     }
+  });
+
+  // ========== SUPER ADMIN: CREATE ACCOUNT ==========
+  app.post("/api/admin/create-account", requireSuperAdmin, async (req, res) => {
+    try {
+      const { email, name, phone, role, adminPermissions } = req.body;
+      if (!email || !name || !role) {
+        return res.status(400).json({ message: "email, name, and role are required" });
+      }
+      if (!["ADMIN", "SUPER_ADMIN"].includes(role)) {
+        return res.status(400).json({ message: "Invalid role for admin account" });
+      }
+      const existing = await storage.getUserByEmail(email);
+      if (existing) return res.status(409).json({ message: "Email already in use" });
+
+      const tempPassword = crypto.randomBytes(12).toString("base64").slice(0, 16);
+      const hashed = await hashPassword(tempPassword);
+      const username = email.split("@")[0].replace(/[^a-z0-9]/gi, "").toLowerCase() + "_" + crypto.randomBytes(3).toString("hex");
+
+      const user = await storage.createUser({
+        email,
+        name,
+        phone: phone || null,
+        username,
+        password: hashed,
+        role,
+        emailVerified: true,
+        adminPermissions: adminPermissions || [],
+      } as any);
+
+      res.json({ id: user.id, email: user.email, name: user.name, role: user.role, tempPassword });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  // ========== SUPER ADMIN: UPDATE USER PERMISSIONS ==========
+  app.patch("/api/admin/users/:id/permissions", requireSuperAdmin, async (req, res) => {
+    try {
+      const userId = parseIdParam(req.params.id);
+      if (userId === null) return res.status(400).json({ message: "Invalid user ID" });
+      const { adminPermissions } = req.body;
+      if (!Array.isArray(adminPermissions)) return res.status(400).json({ message: "adminPermissions must be an array" });
+      const updated = await storage.updateUser(userId, { adminPermissions } as any);
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      res.json({ id: (updated as any).id, adminPermissions: (updated as any).adminPermissions });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  // ========== ADMIN PROFILE ==========
+  app.get("/api/admin/profile", requireAdmin, async (req, res) => {
+    const user = req.currentUser!;
+    res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+  });
+
+  app.patch("/api/admin/profile", requireAdmin, async (req, res) => {
+    try {
+      const user = req.currentUser!;
+      const { name, email, currentPassword, newPassword } = req.body;
+      const updates: any = {};
+      if (name) updates.name = name;
+      if (email && email !== user.email) {
+        const existing = await storage.getUserByEmail(email);
+        if (existing && existing.id !== user.id) {
+          return res.status(409).json({ message: "Email already in use" });
+        }
+        updates.email = email;
+      }
+      if (newPassword) {
+        if (!currentPassword) return res.status(400).json({ message: "Current password is required" });
+        const valid = await comparePasswords(currentPassword, user.password);
+        if (!valid) return res.status(400).json({ message: "Current password is incorrect" });
+        updates.password = await hashPassword(newPassword);
+      }
+      const updated = await storage.updateUser(user.id, updates);
+      res.json({ id: (updated as any).id, name: (updated as any).name, email: (updated as any).email });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  // ========== STUDENT ACCOUNT SETTINGS ==========
+  app.patch("/api/auth/account", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const { name, email, username, currentPassword, newPassword } = req.body;
+      const updates: any = {};
+      if (name) updates.name = name;
+      if (username && username !== user.username) {
+        const existing = await storage.getUserByUsername(username);
+        if (existing && existing.id !== user.id) {
+          return res.status(409).json({ message: "Username already taken" });
+        }
+        updates.username = username;
+      }
+      if (email && email !== user.email) {
+        const existing = await storage.getUserByEmail(email);
+        if (existing && existing.id !== user.id) {
+          return res.status(409).json({ message: "Email already in use" });
+        }
+        updates.email = email;
+      }
+      if (newPassword) {
+        if (!currentPassword) return res.status(400).json({ message: "Current password is required" });
+        const valid = await comparePasswords(currentPassword, user.password);
+        if (!valid) return res.status(400).json({ message: "Current password is incorrect" });
+        updates.password = await hashPassword(newPassword);
+      }
+      const updated = await storage.updateUser(user.id, updates);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  // ========== STRIPE PAYMENTS ==========
+  app.post("/api/payments/create-intent", requireAuth, async (req, res) => {
+    try {
+      if (!stripe) return res.status(503).json({ message: "Payment processing not configured" });
+      const { courseId, couponCode } = req.body;
+      if (!courseId) return res.status(400).json({ message: "courseId is required" });
+
+      const course = await storage.getCourseById(courseId);
+      if (!course) return res.status(404).json({ message: "Course not found" });
+
+      let amount = Math.round(((course as any).salePrice || (course as any).price || 0) * 100);
+      if (amount <= 0) return res.status(400).json({ message: "This course is free" });
+
+      if (couponCode) {
+        const coupon = await storage.getCouponByCode(couponCode);
+        if (coupon && coupon.isActive) {
+          if (coupon.type === "PERCENTAGE") {
+            amount = Math.round(amount * (1 - coupon.value / 100));
+          } else {
+            amount = Math.max(0, amount - Math.round(coupon.value * 100));
+          }
+        }
+      }
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount,
+        currency: "aud",
+        metadata: {
+          courseId: String(courseId),
+          userId: String(req.session.userId),
+          couponCode: couponCode || "",
+        },
+      });
+
+      res.json({ clientSecret: paymentIntent.client_secret, amount });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.post("/api/payments/complete", requireAuth, async (req, res) => {
+    try {
+      if (!stripe) return res.status(503).json({ message: "Payment processing not configured" });
+      const { paymentIntentId, courseId } = req.body;
+      const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      if (intent.status !== "succeeded") {
+        return res.status(400).json({ message: "Payment has not been completed" });
+      }
+      // Check not already enrolled
+      const existing = await storage.getEnrollment(req.session.userId!, courseId);
+      if (existing) return res.json({ success: true });
+      await storage.createEnrollment({ userId: req.session.userId!, courseId, status: "ACTIVE" } as any);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : e.message });
+    }
+  });
+
+  app.get("/api/payments/stripe-key", (req, res) => {
+    res.json({ publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null });
   });
 
   // ========== BUNDLE DETAIL ==========
